@@ -100,6 +100,7 @@ def run(p, zoom, n_threads):
 if __name__ == '__main__':
     p = Panorama(latlng=(50, 14.41))
     #p.getTile(1,1)
-    p.getImage(2)
+    for zoom in range(6):
+        p.getImage(zoom)
     pass
 

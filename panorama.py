@@ -1,18 +1,23 @@
+#
 from Queue import Queue
 from io import BytesIO
 from itertools import product
 from urllib import urlencode
 import threading
-import Image
 import json
 import re
 import requests
-
+import sys
+from PIL import Image
+from matplotlib.pyplot import plot
+from numpy import array
 
 
 # Headers for URL GET requests, can be used later to fool
 # google servers
 import time
+
+
 
 headers = {
     'User-agent': 'custom browser'      # may be used later to fool server
@@ -97,7 +102,7 @@ class Panorama:
         return self.getSpatialNeighbours() + [x for x, t in self.getTemporalNeighbours()]
 
 
-    def getImage(self, zoom = 5, n_threads = 4):
+    def getImage(self, zoom = 5, n_threads = 16):
         tw, th = self.numTiles(zoom)
         tiles = tw*th*[None]
 
@@ -107,8 +112,6 @@ class Panorama:
                 tiles[y+th*x] = self.getTile(x,y,zoom)
                 q.task_done()
 
-        import time
-        t0 = time.time()
         # Starting threads
         q = Queue()
 
@@ -123,21 +126,15 @@ class Panorama:
 
         q.join()            # all jobs finished
 
-        t = time.time()
-        print 'Threads '+str(t-t0)+'s'
-
-        t0 = time.time()
-        # Sticking tiles together
+        # Stitching tiles together
         pano = Image.new('RGB',(512*tw, 512*th))
         grid = [xy for xy in product(range(tw), range(th))]
 
         for x,y in grid:
             pano.paste(tiles[y+th*x], (512*x, 512*y))
-        t = time.time()
-        print 'Sticking '+str(t-t0)+'s'
 
-        pass
-        return pano
+        box = self.cropSize(zoom)
+        return pano.crop(box)
 
     def getTile(self, x, y, zoom = 5):
         url ='https://geo2.ggpht.com/cbk'
@@ -156,8 +153,9 @@ class Panorama:
 
     def numTiles(self, zoom):
         """
-        :param zoom: panorama zoom level 0-5
-        :return: tuple - #of tiles (horizontally, vertivally)
+        Number of image tile for given zoom level.
+        :param zoom: int [0-5] - panorama zoom level
+        :return: tuple - #of tiles (horizontally, vertically)
         """
         # Switch
         return [
@@ -169,6 +167,25 @@ class Panorama:
             (26, 13)
         ][zoom]
 
+
+    def cropSize(self, zoom):
+        """
+        Gives corners of the panorama image crop for given zoom-level.
+        Panoramas are composed of 512x512 tiles. After a stitching at some
+        zoom levels the bottom is padded by black or the right most edge of
+        panorama overlaps the left edge (pano image wraps itself). Hence a
+        crop is necessary to be done. The values were reverse-engineered.
+        :param zoom: int [0-5] - current zoom level
+        :return: tuple - bottom right corner for crop
+        """
+        return [
+            (0, 0, 417, 208),
+            (0, 0, 833, 416),
+            (0, 0, 1665, 832),
+            (0, 0, 3329, 1664),
+            (0, 0, 6656, 3328),
+            (0, 0, 13312, 6656)
+        ][zoom]
 
     def getMeta(self):
         """
@@ -261,6 +278,30 @@ class Panorama:
                 maxy = y if y>maxy else maxy
         print 'Zoom %d: #tiles - horizontally %d   vertically %d' % (zoom, maxx+1, maxy+1)
         return (maxx, maxy)
+
+    def utilGetCrop(self, pano):
+        w,h = pano.size
+        _, _, col, row = pano.getbbox()
+        a = array(pano.rotate(90).convert('L')).astype('int16')
+
+        x = a[0]
+        j = w
+        val = sys.maxint
+        aux = []
+        for y in a[-1:int(w*.7):-1]:
+            v = sum(abs(x-y))
+            aux.append(v)
+            if v<val:
+                val = v
+                col = j
+            j -= 1
+
+        print  "Original size: \t\t\t%d \t%d" % (w, h)
+        print  "Estimated crop size: \t%d \t%d" % (col, row)
+        print '_______________________________________'
+
+
+
 
 
     def __str__(self):
