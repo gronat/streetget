@@ -2,33 +2,32 @@
 from Queue import Queue
 from io import BytesIO
 from itertools import product
+from time import sleep
 from urllib import urlencode
 import threading
 import json
 import re
 import requests
 import sys
+import logging
+
 from PIL import Image
-from matplotlib.pyplot import plot
 from numpy import array
 
 
 # Headers for URL GET requests, can be used later to fool
 # google servers
-import time
-
-
 
 headers = {
     'User-agent': 'custom browser'      # may be used later to fool server
 }
 
+loger = logging.getLogger('panorama')
+
 class Panorama:
     pano_id = None
     meta = None
     time_meta = None
-    url_spatial = None
-    url_time = None
 
     def __init__(self, pano_id = None, latlng = None):
         if not pano_id and not latlng:
@@ -68,8 +67,16 @@ class Panorama:
         :return: list - strings of adjacent panoId hashes
         """
         pano_ids = []
-        for x in self.meta['Links']:
-            pano_ids.append(x['panoId'])
+        try:
+            for x in self.meta['Links']:
+                pano_ids.append(x['panoId'])
+        except Exception as e:
+            w = '%s \t %.6f %.6f \t spatial neighbours not found' % (
+                self.pano_id,
+                self.getGPS()[0],
+                self.getGPS()[1]
+            )
+            loger.warn(w)
 
         return pano_ids
 
@@ -79,19 +86,42 @@ class Panorama:
         timemachine metadata.
         :return: list of tuples (pano_id, 'year, month')
         """
-        aux = self.time_meta[1][0][5][1]  # interesting part of the meta list
+        try:
+            aux = self.time_meta[1][0][5][1]  # interesting part of the meta list
 
-        # Get timestamps of available timemachine
-        tstamps = []
-        for x in aux[8]:
-            tstamps.append('%d, %d' % tuple(x[1]))  # year, month
+            # Get timestamps of available timemachine
+            if len(aux)<8 or not aux[8]:
+                return None
 
-        # Get corresponding panoID hashes
-        pano_ids = ['' for x in range(len(tstamps))]  # empty string list alloc
-        for j in range(1, len(tstamps) + 1):
-            pano_ids[-j] = aux[3][0][-j][0][1]  # pano_id hash string
+            tstamps = []
+            for x in aux[8]:
+                tstamps.append('%d, %d' % tuple(x[1]))  # year, month
+
+            # Get corresponding panoID hashes
+            pano_ids = ['' for x in range(len(tstamps))]  # empty string list alloc
+            for j in range(1, len(tstamps) + 1):
+                pano_ids[-j] = aux[3][0][-j][0][1]  # pano_id hash string
+        except Exception as e:
+            w = '%s \t %.6f %.6f\t temporal neighbours not found' % (
+                self.pano_id,
+                self.getGPS()[0],
+                self.getGPS()[1]
+                )
+            loger.warn(w)
+            return None
 
         return zip(pano_ids, tstamps)
+
+    def getGPS(self):
+        lat = self.meta['Location']['lat']
+        lng = self.meta['Location']['lng']
+        return (float(lat), float(lng))
+
+    def getDate(self):
+        dates = self.meta['Data']['image_date']
+        ptrn = r'(\d+)-\s*(\d+)'
+        m = re.match(ptrn, dates)
+        return (int(m.groups()[0]), int(m.groups()[1]))
 
     def getAllNeighbours(self):
         """
@@ -99,10 +129,27 @@ class Panorama:
         panorama neighbours.
         :return: list  - panoID ahshes
         """
-        return self.getSpatialNeighbours() + [x for x, t in self.getTemporalNeighbours()]
-
+        sn = self.getSpatialNeighbours()
+        tn = self.getTemporalNeighbours()
+        if not tn and not sn:
+            return []
+        elif tn and sn:
+            return (sn + [x for x,t in tn])
+        elif sn:
+            return sn
+        else:
+            return [x for x,t in tn]
 
     def getImage(self, zoom = 5, n_threads = 16):
+        """
+        Gets panorama image at given zoom level. The image
+        consists of image tiles that are fetched and stitched
+        together. The resulting image is cropped in order to
+        form a spherical panorama.
+        :param zoom:
+        :param n_threads:
+        :return: Image - panorama at given zoom level
+        """
         tw, th = self.numTiles(zoom)
         tiles = tw*th*[None]
 
@@ -137,6 +184,13 @@ class Panorama:
         return pano.crop(box)
 
     def getTile(self, x, y, zoom = 5):
+        """
+        Gets panorama image tile 512x512 at position (x,y)
+        :param x: int - tile coordinate horizontal
+        :param y: int - tile coordinate vertical
+        :param zoom: int [0-5] - zoom level
+        :return: Image - panorama tile
+        """
         url ='https://geo2.ggpht.com/cbk'
         query = {
                     'output':   'tile',
@@ -153,7 +207,8 @@ class Panorama:
 
     def numTiles(self, zoom):
         """
-        Number of image tile for given zoom level.
+        Number of image tile for given zoom level. Reverse
+        engineered using the 'utilGetNumTiles()' method
         :param zoom: int [0-5] - panorama zoom level
         :return: tuple - #of tiles (horizontally, vertically)
         """
@@ -167,7 +222,6 @@ class Panorama:
             (26, 13)
         ][zoom]
 
-
     def cropSize(self, zoom):
         """
         Gives corners of the panorama image crop for given zoom-level.
@@ -176,7 +230,7 @@ class Panorama:
         panorama overlaps the left edge (pano image wraps itself). Hence a
         crop is necessary to be done. The values were reverse-engineered.
         :param zoom: int [0-5] - current zoom level
-        :return: tuple - bottom right corner for crop
+        :return: tuple - a crop box, top left, btm right corners
         """
         return [
             (0, 0, 417, 208),
@@ -189,7 +243,7 @@ class Panorama:
 
     def getMeta(self):
         """
-        Gets metadata for given panorama
+        Gets raw metadata of the panorama.
         :param pano_id: string -  panoID hash
         :return: dictionary - data from returned JSON
         """
@@ -208,16 +262,19 @@ class Panorama:
         }
 
         msg = self.requestData(url, query, headers)
+        jsons = None
         try:
-            return json.loads(msg)
+            jsons = json.loads(msg)
         except Exception as e:
-            print e
-            pass
+            w = '%s has no meta JSON, received: %s' % (self.pano_id, msg)
+            loger.warn(w + str(e))
+
+        return jsons
 
     def getTimeMeta(self):
         """
-        Gets timemachne metadata for a given panorama.
-        The crazy query string was reverse engineered by
+        Gets raw timemachne metadata the panorama.
+        The crazy 'query' string was reverse engineered by
         listening to the network trafic.
         :return: nested list from JSON
         """
@@ -230,6 +287,7 @@ class Panorama:
                     '!1e8!4m1!1i48!5m1!1e1!5m1!1e2!6m1!1e1!6m1!1e2',
             'output': 'json'
         }
+
 
         msg = self.requestData(url, query, headers)      # .js file as string
 
@@ -245,14 +303,20 @@ class Panorama:
         # Find [ or , followed by , and insert null in between
         pattern = r'([\[,])(?=,)'
         msg = re.sub(pattern, r'\1null', msg)
-        # Load the JSON nested list
-        data = json.loads(msg);
+
+        data = None
+        try:
+            # Load the JSON nested list
+            data = json.loads(msg);
+        except Exception as e:
+            w = '%s has no time meta JSON, received: %s' % (self.pano_id, msg)
+            loger.warn(w + str(e))
 
         return data
 
     def requestData(self, url, query, headers=None):
         """
-        Sends GET URL request formed from base url, query string
+        Sends GET URL request formed from a base url, a query string
         and headers. Returns whatever this request receives back.
 
         :param url: string - base URL
@@ -262,9 +326,19 @@ class Panorama:
         """
         # URL GET request
         query_str = urlencode(query).encode('ascii')
-        u = requests.get(url + "?" + query_str, headers=headers)
+        u = None
+        # Handle loose internet connection via loop
+        while True:
+            try:
+                u = requests.get(url + "?" + query_str, headers=headers)
+            except Exception as e:
+                print type(e).__name__ + str(e)
+                print 'waiting for connection...'
+                sleep(10)
+            if u:
+                break
+
         msg = u.content
-        #print 'req: '+ url + "?" + query_str
         return msg
 
     def utilGetNumTiles(self, zoom):
@@ -303,7 +377,6 @@ class Panorama:
 
 
 
-
     def __str__(self):
         s = ''
         s+= 'panoID %s\n' % self.pano_id
@@ -314,3 +387,8 @@ class Panorama:
             s+= x.__str__() + ', ' + t.__str__() + '\n'
 
         return s
+
+if __name__ == '__main__':
+    while True:
+        print '.'
+        p = Panorama('u0KmGAG72ouXlVQ8_HtUrA')
