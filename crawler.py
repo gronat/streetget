@@ -4,7 +4,6 @@ import sys
 from time import sleep
 import os
 import dill as pickle
-from pip.utils import logging
 from panorama import Panorama
 from database2 import Database
 import logging
@@ -71,6 +70,7 @@ class Crawler:
         for t in self.threads:
             t.join()
         loger.debug('All threads finished')
+        self.save()
 
     def printStatus(self):
         """
