@@ -7,6 +7,7 @@ class Database:
         self.d = dict()
         self.s = set()
         self.size_q = 0
+        self.processing = 0
 
 
     def enqueue(self, key):
@@ -15,8 +16,11 @@ class Database:
             self.q.put(key)
             self.size_q += 1
 
+
     def dequeue(self):
         self.size_q -= 1
+        with self.q.mutex:
+            self.processing += 1
         return self.q.get()
 
     def add(self, key, val):
@@ -33,3 +37,8 @@ class Database:
 
     def task_done(self):
         self.q.task_done()
+        with self.q.mutex:
+            self.processing -= 1
+    
+    def processing(self):
+        return self.processing

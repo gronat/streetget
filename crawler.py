@@ -26,8 +26,9 @@ class Crawler:
         self.x = []
         self.y = []
         self.exit_flag = False
-        self.threads = []
         self.t_save = 10       # backup db every 5min
+        self.n_thr = 32
+        self.threads = self.n_thr*[None]
 
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
@@ -40,16 +41,22 @@ class Crawler:
         """
         Resumes existing serialized database.
         """
-        try:
-            if os.path.isfile(self.fname):
-                with open(self.fname) as f:
-                    loger.info('Resuming db')
-                    db = pickle.load(f)
+        if not os.path.isfile(self.fname):
+            loger.warning('No file: '+ self.fname)
+            return
+        loger.info('Resuming db')
+        with open(self.fname) as f:
+            try:
+                db = pickle.load(f)
+                if db.processing > 0:
+                    raise ImportError()
+            except ImportError:
+                loger.error('db corrupted: q contains unfinished jobs')
+            except Exception as e:
+                loger.error('db resume failed:' + str(e))
+            else:
                 self.db = db
                 loger.info('db resumed')
-
-        except:
-            loger.error('resuming db failed')
 
 
     def save(self):
@@ -63,14 +70,19 @@ class Crawler:
             loger.info('Saving db')
             pickle.dump(self.db, f)
             loger.info('db saved')
+            if self.db.processing >0:
+                loger.error('db integrity corrupted, proc > 0')
 
     def clean(self):
-        loger.debug('Waiting for threads to finish')
-        self.exit_flag = True
-        for t in self.threads:
-            t.join()
-        loger.debug('All threads finished')
+        loger.debug('Cleaning')
+        self.stopThreads()
         self.save()
+
+    def backup(self):
+        loger.debug('Backup')
+        self.stopThreads()
+        self.save()
+        self.startThreads()
 
     def printStatus(self):
         """
@@ -81,13 +93,7 @@ class Crawler:
             n0 = self.db.dsize()
             sleep(dt)
             n1 = self.db.dsize()
-            with self.db.q.mutex:
-                print 'size %05d \t %0.1f pano/min' % (n1, (n1 - n0) /dt*60,)
-
-    def saver(self):
-        while True:
-            sleep(self.t_save)
-            self.save()
+            print 'size %05d \t %0.1f pano/min' % (n1, (n1 - n0) /dt*60,)
 
     def threader(self):
         while not self.exit_flag:
@@ -116,24 +122,40 @@ class Crawler:
         for n in neighbours:
             self.db.enqueue(n)
 
-        # with self.db.q.mutex:
-        #     print 'Visited %s \t %d-%d \t %.6f %.6f' % ((pano_id,)+date+gps)
+
+    def startThreads(self):
+        self.exit_flag = False
+        # Starting threads
+        for j in range(self.n_thr):
+            t = threading.Thread(target=self.threader)
+            t.start()
+            self.threads[j] = t
+        loger.debug('Threads started')
+
+    def stopThreads(self):
+        self.exit_flag = True
+        # Stopping threads
+        for t in self.threads:
+            t.join()
+        loger.debug('Threads stopped')
+
+    def backupPeriodic(self):
+        while True:
+            sleep(self.t_save)
+            self.backup()
 
     def run(self):
 
-        # Starting threads
-        for j in range(64):
-            t = threading.Thread(target=self.threader)
-            t.start()
-            self.threads.append(t)
+        # Threads for BFS
+        self.startThreads()
 
-        # Thread that prints a progress
-        t = threading.Thread(target=self.printStatus)
+        # Thread for periodic db backup
+        t = threading.Thread(target=self.backupPeriodic)
         t.daemon = True
         t.start()
 
-        # Thread that saves db every t_save sec
-        t = threading.Thread(target=self.saver)
+        # Thread that prints a progress
+        t = threading.Thread(target=self.printStatus)
         t.daemon = True
         t.start()
 
@@ -144,10 +166,13 @@ class Crawler:
         try:
             while self.db.q.unfinished_tasks > 0:
                 sleep(1)
+            self.db.q.join()
         except (KeyboardInterrupt, SystemExit):
             self.clean()
         except:
             pass
+
+        print('All panporama collected')
 
 
 
