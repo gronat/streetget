@@ -88,12 +88,22 @@ class Crawler:
         """
         Prints some info about current state of downloading.
         """
+        dt = 2
+        N = 0
+        avg = 0
         while True:
-            dt = 2
+            N += 1
             n0 = self.db.dsize()
             sleep(dt)
             n1 = self.db.dsize()
-            print 'size %05d \t %0.1f pano/min' % (n1, (n1 - n0) /dt*60,)
+            v = (n1 - n0) /dt*60
+            avg += (v - avg)/N
+            print 'db-size %05d\t q-size %d\t %d p/min\t\t avg: %.1f' % (
+                n1,
+                self.db.qsize(),
+                v,
+                avg,
+            )
 
     def threader(self):
         while not self.exit_flag:
