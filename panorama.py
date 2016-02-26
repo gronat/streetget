@@ -116,9 +116,17 @@ class Panorama:
         return zip(pano_ids, tstamps)
 
     def getGPS(self):
-        lat = self.meta['Location']['lat']
-        lng = self.meta['Location']['lng']
-        return (float(lat), float(lng))
+        ll = (None, None)
+        try:
+            lat = self.meta['Location']['lat']
+            lng = self.meta['Location']['lng']
+            ll = (float(lat), float(lng))
+        except Exception as e:
+            msg = '%s no GPS found - %s: %s' % (
+                self.pano_id, type(e).__name__, str(e)
+            )
+            loger.error(msg)
+        return ll
 
     def getDate(self):
         dates = self.meta['Data']['image_date']
