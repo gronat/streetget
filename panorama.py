@@ -129,10 +129,18 @@ class Panorama:
         return ll
 
     def getDate(self):
-        dates = self.meta['Data']['image_date']
-        ptrn = r'(\d+)-\s*(\d+)'
-        m = re.match(ptrn, dates)
-        return (int(m.groups()[0]), int(m.groups()[1]))
+        dd = (None, None)
+        try:
+            dates = self.meta['Data']['image_date']
+            ptrn = r'(\d+)-\s*(\d+)'
+            m = re.match(ptrn, dates)
+            dd = (int(m.groups()[0]), int(m.groups()[1]))
+        except Exception as e:
+            msg = '% no date found - %s: %s' % (
+                self.pano_id, type(e).__name__, str(e)
+            )
+            loger.error(msg)
+        return dd
 
     def getAllNeighbours(self):
         """

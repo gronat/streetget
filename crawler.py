@@ -20,8 +20,8 @@ loger.setLevel(logging.DEBUG)
 
 
 class Crawler:
-    t_save = 10  # backup db every 5min
-    n_thr = 8
+    t_save = 60  # backup db every 5min
+    n_thr = 32
     threads = n_thr * [None]
     db = Database()
     x = []
