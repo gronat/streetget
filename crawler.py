@@ -156,6 +156,9 @@ class Crawler:
         if not pano_id:
             return
         p = Panorama(pano_id)
+        if not p.isValid():
+            return
+
         gps = p.getGPS()
         date = p.getDate()
         neighbours = p.getAllNeighbours()
@@ -234,9 +237,9 @@ def plotData(fname):
 if __name__ == '__main__':
     pass
     fname = './db.pickle'
-    p = Panorama('Np6NPQCCg3ix9w_BIWqfhw')
+    p = Panorama('W0Mf-bGSSLAAAAQYk4IWbw')
     #plotData(fname)
-    c = Crawler(latlng=(50, 14.41))
+    c = Crawler(latlng=(48.853, 2.35), label='paris')
     c.run()
     pass
 

@@ -60,6 +60,9 @@ class Panorama:
 
         return data['Location']['panoId'].encode('ascii')
 
+    def isValid(self):
+        return len(self.meta) > 0
+
     def getSpatialNeighbours(self):
         """
         Reads metadata returned from getMeta() and extracts
@@ -136,7 +139,7 @@ class Panorama:
             m = re.match(ptrn, dates)
             dd = (int(m.groups()[0]), int(m.groups()[1]))
         except Exception as e:
-            msg = '% no date found - %s: %s' % (
+            msg = '%s no date found - %s: %s' % (
                 self.pano_id, type(e).__name__, str(e)
             )
             loger.error(msg)
