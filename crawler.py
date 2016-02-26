@@ -112,7 +112,6 @@ class Crawler:
         loger.debug('Cleaning')
         self.stopThreads()
         self.save(self.fname)
-        self.save(self.fname_bck)
 
     def backup(self):
         loger.debug('Backup')
