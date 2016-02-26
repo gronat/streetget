@@ -20,7 +20,7 @@ loger.setLevel(logging.DEBUG)
 
 
 class Crawler:
-    t_save = 60  # backup db every 5min
+    t_save = 10  # backup db every 5min
     n_thr = 8
     threads = n_thr * [None]
     db = Database()
@@ -35,6 +35,7 @@ class Crawler:
 
         self.dir = os.path.join(root, label)
         self.fname = os.path.join(root, label, 'db.pickle')
+        self.fname_bck = self.fname + '.bck'
         self.start_id = pano_id
         self.start_latlng = latlng
         self.exit_flag = False
@@ -43,53 +44,66 @@ class Crawler:
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
         else:
-            self.resume()
+            if not self.resume(self.fname):     # restore database
+                self.resume(self.fname_bck)     # roll back to backup
 
-    def resume(self):
+    def resume(self, fname):
         """
         Resumes existing serialized database.
         """
-        if not os.path.isfile(self.fname):
-            loger.warning('No file: '+ self.fname)
+        if not os.path.isfile(fname):
+            loger.warning('No file: '+ fname)
             return
-        loger.info('Resuming db')
-        with open(self.fname) as f:
-            try:
+        loger.info('Resuming db from ' + fname)
+
+        try:
+            with open(self.fname) as f:
                 db = pickle.load(f)
-                if not db.processing == 0:
-                    raise ImportError()
-                self.db = db
-                loger.info('db resumed')
-            except ImportError:
-                loger.error(
-                    'db corrupted: q unfinished jobs %d' % (
-                        self.db.processing
-                    )
+            if not db.processing == 0:
+                raise ImportError()
+            self.db = db
+            loger.info('db resumed')
+            return True
+        except ImportError:
+            loger.error(
+                'db corrupted: q unfinished jobs %d' % (
+                    self.db.processing
                 )
-            except Exception as e:
-                loger.error('db resume failed:' +
+            )
+            return False
+        except Exception as e:
+            loger.error('db resume failed:' +
                             type(e).__name__ +
                             str(e)
-                            )
+                        )
+            return False
 
-
-    def save(self):
+    def save(self, fname):
         """
         Saves existing database using dill package.
         Notice that pickle package can't handle objects
         with mutex lock. Hence, dill is used instead of pickle
         :return:
         """
-        with open(self.fname,'wb') as f:
-            loger.info('Saving db')
-            pickle.dump(self.db, f)
-            loger.info('db saved')
-            if not self.db.processing == 0:
+
+        loger.info('Saving db')
+        if not self.db.processing == 0:
                 loger.error(
-                    'db corrupted: q unfinished jobs %d' % (
+                    'db corrupted: q unfinished jobs %d' %
+                    (
                         self.db.processing
                     )
                 )
+                return False
+        with open(fname, 'wb') as f:
+                pickle.dump(self.db, f)
+                loger.info('db saved to ' + fname)
+                return True
+
+        loger.error('db unable to save!')
+        raise IOError('db unable to save!')
+
+
     def clean(self):
         """
         Cleans before exit:
@@ -97,12 +111,14 @@ class Crawler:
         """
         loger.debug('Cleaning')
         self.stopThreads()
-        self.save()
+        self.save(self.fname)
+        self.save(self.fname_bck)
 
     def backup(self):
         loger.debug('Backup')
         self.stopThreads()
-        self.save()
+        self.save(self.fname)
+        self.save(self.fname_bck)
         self.startThreads()
 
     def printStatus(self):
@@ -198,7 +214,7 @@ class Crawler:
                 sleep(1)
             self.db.join()
         except (KeyboardInterrupt, SystemExit):
-            loger.debug('handling keyboard or system interrupt')
+            loger.debug('*** handling keyboard or system interrupt')
             self.clean()
             raise
 
@@ -219,6 +235,7 @@ def plotData(fname):
 if __name__ == '__main__':
     pass
     fname = './db.pickle'
+    p = Panorama('Np6NPQCCg3ix9w_BIWqfhw')
     #plotData(fname)
     c = Crawler(latlng=(50, 14.41))
     c.run()
