@@ -1,5 +1,6 @@
 import threading
 import sys
+import atexit
 
 from time import sleep
 import os
@@ -7,35 +8,42 @@ import dill as pickle
 from panorama import Panorama
 from database2 import Database
 import logging
+import matplotlib.pyplot as plt
 
-logging.basicConfig(filename='err_panorama.log')
+# Setting up loger
+l_fmt = '%(asctime)s %(levelname)s: %(message)s'      # format
+l_dfmt = '%m/%d/%Y %I:%M:%S %p'                       # date format
+l_fname = 'err_panorama.log'                          # file name
+logging.basicConfig(filename=l_fname, format=l_fmt, datefmt=l_dfmt)
 loger = logging.getLogger('crawler')
 loger.setLevel(logging.DEBUG)
 
+
 class Crawler:
+    t_save = 60  # backup db every 5min
+    n_thr = 8
+    threads = n_thr * [None]
+    db = Database()
+    x = []
+    y = []
+
     def __init__(self, latlng=None, pano_id=None, label='myCity', root=r'./myData'):
         if not latlng and not pano_id:
             raise ValueError('start point latlng or pano_id not given')
 
+        loger.info('___ Crawler starting ___')
 
         self.dir = os.path.join(root, label)
         self.fname = os.path.join(root, label, 'db.pickle')
         self.start_id = pano_id
         self.start_latlng = latlng
-        self.db = Database()
-        self.x = []
-        self.y = []
         self.exit_flag = False
-        self.t_save = 10       # backup db every 5min
-        self.n_thr = 32
-        self.threads = self.n_thr*[None]
+
 
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
         else:
             self.resume()
-
-
 
     def resume(self):
         """
@@ -48,15 +56,21 @@ class Crawler:
         with open(self.fname) as f:
             try:
                 db = pickle.load(f)
-                if db.processing > 0:
+                if not db.processing == 0:
                     raise ImportError()
-            except ImportError:
-                loger.error('db corrupted: q contains unfinished jobs')
-            except Exception as e:
-                loger.error('db resume failed:' + str(e))
-            else:
                 self.db = db
                 loger.info('db resumed')
+            except ImportError:
+                loger.error(
+                    'db corrupted: q unfinished jobs %d' % (
+                        self.db.processing
+                    )
+                )
+            except Exception as e:
+                loger.error('db resume failed:' +
+                            type(e).__name__ +
+                            str(e)
+                            )
 
 
     def save(self):
@@ -70,10 +84,17 @@ class Crawler:
             loger.info('Saving db')
             pickle.dump(self.db, f)
             loger.info('db saved')
-            if self.db.processing >0:
-                loger.error('db integrity corrupted, proc > 0')
-
+            if not self.db.processing == 0:
+                loger.error(
+                    'db corrupted: q unfinished jobs %d' % (
+                        self.db.processing
+                    )
+                )
     def clean(self):
+        """
+        Cleans before exit:
+        let threads finish job and save databas.
+        """
         loger.debug('Cleaning')
         self.stopThreads()
         self.save()
@@ -98,7 +119,7 @@ class Crawler:
             n1 = self.db.dsize()
             v = (n1 - n0) /dt*60
             avg += (v - avg)/N
-            print 'db-size %05d\t q-size %d\t %d p/min\t\t avg: %.1f' % (
+            print 'db-size %05d\t q-size %d\t %d p/min\t avg: %.1f' % (
                 n1,
                 self.db.qsize(),
                 v,
@@ -155,7 +176,6 @@ class Crawler:
             self.backup()
 
     def run(self):
-
         # Threads for BFS
         self.startThreads()
 
@@ -169,25 +189,38 @@ class Crawler:
         t.daemon = True
         t.start()
 
-        # Enqueueing the first job
-        p = Panorama(self.start_id, self.start_latlng)
-        self.db.enqueue(p.pano_id)
-
         try:
-            while self.db.q.unfinished_tasks > 0:
+            # Enqueueing the first job
+            p = Panorama(self.start_id, self.start_latlng)
+            self.db.enqueue(p.pano_id)
+
+            while not self.db.q.unfinished_tasks == 0:
                 sleep(1)
-            self.db.q.join()
+            self.db.join()
         except (KeyboardInterrupt, SystemExit):
+            loger.debug('handling keyboard or system interrupt')
             self.clean()
-        except:
-            pass
+            raise
 
-        print('All panporama collected')
-
+        print('All panorama collected')
 
 
+def plotData(fname):
+    with open(fname) as f:
+        db = pickle.load(f)
+    d = db.d
+    lat = [d[key]['latlng'][0] for key in d]
+    lng = [d[key]['latlng'][1] for key in d]
+    lat = [lat[j] for j in range(0,len(lat),100)]
+    lng = [lng[j] for j in range(0,len(lng),100)]
+    h = plt.plot(lng, lat, '.')
+    return h
 
 if __name__ == '__main__':
+    pass
+    fname = './db.pickle'
+    #plotData(fname)
     c = Crawler(latlng=(50, 14.41))
     c.run()
+    pass
 

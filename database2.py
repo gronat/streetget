@@ -18,10 +18,11 @@ class Database:
 
 
     def dequeue(self):
+        item = self.q.get()
         self.size_q -= 1
         with self.q.mutex:
             self.processing += 1
-        return self.q.get()
+        return item
 
     def add(self, key, val):
         self.d[key] = val
@@ -36,9 +37,9 @@ class Database:
         return self.size_q
 
     def task_done(self):
-        self.q.task_done()
         with self.q.mutex:
             self.processing -= 1
-    
+        self.q.task_done()
+
     def processing(self):
         return self.processing

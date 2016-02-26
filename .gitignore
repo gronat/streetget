@@ -1,4 +1,6 @@
 .idea/
+*.pickle
+*.html
 *.pyc
 *.log
 myData/

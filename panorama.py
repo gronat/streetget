@@ -71,10 +71,13 @@ class Panorama:
             for x in self.meta['Links']:
                 pano_ids.append(x['panoId'])
         except Exception as e:
-            w = '%s \t %.6f %.6f \t spatial neighbours not found' % (
+            w = '%s \t %.6f %.6f \t spatial neighbours not found,\n' \
+                '%s: %s' % (
                 self.pano_id,
                 self.getGPS()[0],
-                self.getGPS()[1]
+                self.getGPS()[1],
+                type(e).__name__,
+                str(e)
             )
             loger.warn(w)
 
