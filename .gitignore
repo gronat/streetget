@@ -1,4 +1,6 @@
 .idea/
+*.json
+*.jpg
 *.pickle
 *.html
 *.pyc

@@ -1,4 +1,4 @@
-#
+
 from Queue import Queue
 from io import BytesIO
 from itertools import product
@@ -61,6 +61,7 @@ class Panorama:
         return data['Location']['panoId'].encode('ascii')
 
     def isValid(self):
+        """ Panorama without metadata is not valid """
         return len(self.meta) > 0
 
     def getSpatialNeighbours(self):
@@ -269,6 +270,7 @@ class Panorama:
         :param pano_id: string -  panoID hash
         :return: dictionary - data from returned JSON
         """
+
         url = 'https://cbks1.google.com/cbk'
         query = {
             'output':       'json',
@@ -310,19 +312,17 @@ class Panorama:
             'output': 'json'
         }
 
-
         msg = self.requestData(url, query, headers)      # .js file as string
 
-        """
-        Handle a content of the .js file retrieved form the server
-        Here again - reverse engineerd. The js file contains
-        nested arrays with some useful info. String is
-        modified such that it can be loaded as JOSN.
-        """
+        # Handle a content of the .js file retrieved form the server
+        # Here again - reverse engineerd. The js file contains
+        # nested arrays with some useful info. String is
+        # modified such that it can be loaded as JOSN.
+
         # Trash the first line
         pattern  = r'.+\n(.+)'
         msg = re.match(pattern, msg).groups()[0]
-        # Find [ or , followed by , and insert null in between
+        # Find '[' or ',' followed by ',' and insert 'null' in between
         pattern = r'([\[,])(?=,)'
         msg = re.sub(pattern, r'\1null', msg)
 
@@ -336,11 +336,36 @@ class Panorama:
 
         return data
 
+    def saveMeta(self, fname):
+        """
+        Saves meta data as JSON
+        :param fname: string - filename
+        """
+        with open(fname, 'w') as f:
+            json.dump(self.meta, f)
+
+    def saveTimeMeta(self, fname):
+        """
+        Saves timemachine meta data as JSON
+        :param fname: string - filename
+        """
+        with open(fname, 'w') as f:
+            json.dump(self.meta, f)
+
+    def saveImage(self, fname, zoom=5):
+        """
+        Fetches panorama image at given zoom-level
+        and saves as JPEG.
+        :param fname: string - filename
+        :param zoom: int [0-5] - zoom-level
+        """
+        img = self.getImage(zoom)
+        img.save(fname, 'JPEG')
+
     def requestData(self, url, query, headers=None):
         """
         Sends GET URL request formed from a base url, a query string
         and headers. Returns whatever this request receives back.
-
         :param url: string - base URL
         :param query: dictionary - url query paramteres as key-value
         :param headers: dictionary - header parameters as key-value
@@ -363,7 +388,7 @@ class Panorama:
         msg = u.content
         return msg
 
-    def utilGetNumTiles(self, zoom):
+    def _utilGetNumTiles(self, zoom):
         maxx = 0
         maxy = 0
         for x,y in product(range(30), range(20)):
@@ -375,10 +400,10 @@ class Panorama:
         print 'Zoom %d: #tiles - horizontally %d   vertically %d' % (zoom, maxx+1, maxy+1)
         return (maxx, maxy)
 
-    def utilGetCrop(self, pano):
-        w,h = pano.size
-        _, _, col, row = pano.getbbox()
-        a = array(pano.rotate(90).convert('L')).astype('int16')
+    def _utilGetCrop(self, img):
+        w,h = img.size
+        _, _, col, row = img.getbbox()
+        a = array(img.rotate(90).convert('L')).astype('int16')
 
         x = a[0]
         j = w
@@ -403,10 +428,16 @@ class Panorama:
         s = ''
         s+= 'panoID %s\n' % self.pano_id
         s+= 'neoghbours:\n'
-        for x in self.getSpatialNeighbours():
-            s+= x.__str__() + '\n'
-        for x,t in self.getTemporalNeighbours():
-            s+= x.__str__() + ', ' + t.__str__() + '\n'
+
+        nbhs = self.getSpatialNeighbours()
+        if nbhs:
+            for x in nbhs:
+                s += x.__str__() + '\n'
+
+        nbhs = self.getTemporalNeighbours()
+        if nbhs:
+            for x,t in nbhs:
+                s += x.__str__() + ', ' + t.__str__() + '\n'
 
         return s
 
@@ -414,3 +445,4 @@ if __name__ == '__main__':
     while True:
         print '.'
         p = Panorama('u0KmGAG72ouXlVQ8_HtUrA')
+        pass

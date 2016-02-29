@@ -41,5 +41,8 @@ class Database:
             self.processing -= 1
         self.q.task_done()
 
+    def join(self):
+        self.q.join()
+
     def processing(self):
         return self.processing

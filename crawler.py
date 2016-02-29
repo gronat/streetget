@@ -1,14 +1,16 @@
 import threading
-import sys
-import atexit
-
-from time import sleep
 import os
-import dill as pickle
-from panorama import Panorama
-from database2 import Database
+from math import sqrt
+
+import dill
+import json
 import logging
 import matplotlib.pyplot as plt
+from panorama import Panorama
+from database2 import Database
+from time import sleep
+
+
 
 # Setting up loger
 l_fmt = '%(asctime)s %(levelname)s: %(message)s'      # format
@@ -20,16 +22,16 @@ loger.setLevel(logging.DEBUG)
 
 
 class Crawler:
-    t_save = 60  # backup db every 5min
-    n_thr = 32
-    threads = n_thr * [None]
+    t_save = 600                # backup db every 10min
+    n_thr = 4
+    threads = n_thr * [None]    # thread vector allocation
     db = Database()
     x = []
     y = []
 
-    def __init__(self, latlng=None, pano_id=None, label='myCity', root=r'./myData'):
+    def __init__(self, latlng=None, pano_id=None, label='myCity', root='myData', validator=None):
         if not latlng and not pano_id:
-            raise ValueError('start point latlng or pano_id not given')
+            raise ValueError('start point (latlng or pano_id) not given')
 
         loger.info('___ Crawler starting ___')
 
@@ -38,13 +40,13 @@ class Crawler:
         self.fname_bck = self.fname + '.bck'
         self.start_id = pano_id
         self.start_latlng = latlng
-        self.exit_flag = False
+        self.exit_flag = False                  # flag for signaling threads
+        self.inArea = validator
 
-
-        if not os.path.exists(self.dir):
+        if not os.path.exists(self.dir):        # new dataset
             os.makedirs(self.dir)
         else:
-            if not self.resume(self.fname):     # restore database
+            if not self.resume(self.fname):     # restores existing database
                 self.resume(self.fname_bck)     # roll back to backup
 
     def resume(self, fname):
@@ -58,12 +60,11 @@ class Crawler:
 
         try:
             with open(self.fname) as f:
-                db = pickle.load(f)
-            if not db.processing == 0:
+                db = dill.load(f)
+            if not db.processing == 0:          # integrity check
                 raise ImportError()
             self.db = db
             loger.info('db resumed')
-            return True
         except ImportError:
             loger.error(
                 'db corrupted: q unfinished jobs %d' % (
@@ -78,14 +79,16 @@ class Crawler:
                         )
             return False
 
+        return True
+
+
     def save(self, fname):
         """
-        Saves existing database using dill package.
+        Saves existing database using the dill package.
         Notice that pickle package can't handle objects
         with mutex lock. Hence, dill is used instead of pickle
         :return:
         """
-
         loger.info('Saving db')
         if not self.db.processing == 0:
                 loger.error(
@@ -95,19 +98,16 @@ class Crawler:
                     )
                 )
                 return False
+
         with open(fname, 'wb') as f:
-                pickle.dump(self.db, f)
+                dill.dump(self.db, f)
                 loger.info('db saved to ' + fname)
                 return True
-
-        loger.error('db unable to save!')
-        raise IOError('db unable to save!')
-
 
     def clean(self):
         """
         Cleans before exit:
-        let threads finish job and save databas.
+        Let the threads finish jobs and save the database.
         """
         loger.debug('Cleaning')
         self.stopThreads()
@@ -134,29 +134,31 @@ class Crawler:
             n1 = self.db.dsize()
             v = (n1 - n0) /dt*60
             avg += (v - avg)/N
-            print 'db-size %05d\t q-size %d\t %d p/min\t avg: %.1f' % (
+            print 'db-sz %05d\t q-sz %d\t alive: %d \t %d p/m\t avg: %.1f' % (
                 n1,
                 self.db.qsize(),
+                threading.active_count(),
                 v,
                 avg,
             )
 
     def threader(self):
+        zoom = 1
         while not self.exit_flag:
             pano_id = self.db.dequeue()
-            self.visitPano(pano_id)
+            p = Panorama(pano_id)
+            self.visitPano(p)
+            self.savePano(p, zoom)
             self.db.task_done()
 
-    def visitPano(self, pano_id):
+    def visitPano(self, p):
         """
         Visits panorama, extracts meta data and adds
         info about panorama into database. Neighbour
         panoramas are added to the database queue.
         """
-        if not pano_id:
-            return
-        p = Panorama(pano_id)
-        if not p.isValid():
+
+        if not p.isValid() or not self.inArea(p):
             return
 
         gps = p.getGPS()
@@ -167,10 +169,28 @@ class Crawler:
         self.x.append(gps[0])
         self.y.append(gps[1])
 
-        self.db.add(pano_id, data)
+        self.db.add(p.pano_id, data)      # update visited
         for n in neighbours:
-            self.db.enqueue(n)
+            self.db.enqueue(n)          # update queue
 
+
+    def savePano(self, p, zoom):
+        """
+        Saves panorama image at given zoom-level and its
+        metadata. Directory name corresponds to the first
+        two characters of the pano_id hash.
+        :param p: Panorama - object
+        :param zoom: int - zoom level
+        """
+        if not p or not p.isValid():
+            return
+        fdir = p.pano_id[0:2]
+        fname = p.pano_id
+        fbase = os.path.join(self.dir, fdir, fname)
+
+        p.saveMeta(fbase + '_meta.json')
+        p.saveTimeMeta(fbase + '_time_meta.json')
+        p.saveImg(fbase + '_zoom_' + str(zoom) + '.jgp')
 
     def startThreads(self):
         self.exit_flag = False
@@ -194,6 +214,12 @@ class Crawler:
             self.backup()
 
     def run(self):
+        """
+        Performs parallel BFS crawling. Main threads perform crawling via BFS.
+        There are two auxiliary threads. Former manages periodic database backup
+        while latter periodically prints state of downloading. Saving the current
+        state at KeyboardInterrupt is handled.
+        """
         # Threads for BFS
         self.startThreads()
 
@@ -220,6 +246,7 @@ class Crawler:
             self.clean()
             raise
 
+        self.save(self.fname)
         print('All panorama collected')
 
 
@@ -234,12 +261,23 @@ def plotData(fname):
     h = plt.plot(lng, lat, '.')
     return h
 
+def validator_L2(latlng_0, dst):
+
+    def isClose(p):
+        ltln = p.getGPS()
+        d = sqrt((latlng_0[0] - ltln[0])**2 + (latlng_0[1] - ltln[1])**2)
+        return d<dst
+
+    return isClose
+
+
 if __name__ == '__main__':
     pass
-    fname = './db.pickle'
-    p = Panorama('W0Mf-bGSSLAAAAQYk4IWbw')
+    latlng_0 = (50, 14.41)
+    l2 = validator_L2((50, 14.41), 0.001)
     #plotData(fname)
-    c = Crawler(latlng=(48.853, 2.35), label='paris')
+    c = Crawler(latlng=latlng_0, label='test', validator=l2)
     c.run()
+    del c
     pass
 
