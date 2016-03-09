@@ -86,7 +86,10 @@ class Crawler:
 
         for n in p.getAllNeighbours():
             self.db.enqueue(n)            # update queue
-            
+
+        if p.isCustom():
+            return                        # not Google panorama
+
         data = {'latlng': p.getGPS(), 'date': p.getDate()}
         self.db.add(p.pano_id, data)      # update visited db
         
