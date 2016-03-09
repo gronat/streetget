@@ -1,35 +1,25 @@
 import threading
 import os
-from math import sqrt
-
 import dill
-import json
 import logging
+import validator
 import matplotlib.pyplot as plt
+import shutil
 from panorama import Panorama
 from database2 import Database
-from time import sleep
+import time
 
-
-
-# Setting up loger
-l_fmt = '%(asctime)s %(levelname)s: %(message)s'      # format
-l_dfmt = '%m/%d/%Y %I:%M:%S %p'                       # date format
-l_fname = 'err_panorama.log'                          # file name
-logging.basicConfig(filename=l_fname, format=l_fmt, datefmt=l_dfmt)
 loger = logging.getLogger('crawler')
 loger.setLevel(logging.DEBUG)
 
-
 class Crawler:
-    t_save = 600                # backup db every 10min
-    n_thr = 4
-    threads = n_thr * [None]    # thread vector allocation
-    db = Database()
-    x = []
-    y = []
+    t_save  = 300                # backup db every 10min
+    n_thr   = 16                 # No. of crawling threads
 
-    def __init__(self, latlng=None, pano_id=None, label='myCity', root='myData', validator=None):
+    def __init__(self,
+                    latlng=None, pano_id=None, label='myCity',
+                    root='myData', validator=None, zoom=5, images=False
+                 ):
         if not latlng and not pano_id:
             raise ValueError('start point (latlng or pano_id) not given')
 
@@ -38,118 +28,52 @@ class Crawler:
         self.dir = os.path.join(root, label)
         self.fname = os.path.join(root, label, 'db.pickle')
         self.fname_bck = self.fname + '.bck'
+
+        self.zoom = zoom if isinstance(zoom, list) else [zoom]
         self.start_id = pano_id
         self.start_latlng = latlng
-        self.exit_flag = False                  # flag for signaling threads
         self.inArea = validator
+
+        self.db = Database()
+        self.threads = self.n_thr * [None]      # thread vector allocation
+        self.exit_flag = False                  # flag for signaling threads
+
+        self.images = images
 
         if not os.path.exists(self.dir):        # new dataset
             os.makedirs(self.dir)
+            p = Panorama(self.start_id, self.start_latlng)
+            self.db.enqueue(p.pano_id)          # starting panorama into a queue
         else:
-            if not self.resume(self.fname):     # restores existing database
-                self.resume(self.fname_bck)     # roll back to backup
-
-    def resume(self, fname):
-        """
-        Resumes existing serialized database.
-        """
-        if not os.path.isfile(fname):
-            loger.warning('No file: '+ fname)
-            return
-        loger.info('Resuming db from ' + fname)
-
-        try:
-            with open(self.fname) as f:
-                db = dill.load(f)
-            if not db.processing == 0:          # integrity check
-                raise ImportError()
-            self.db = db
-            loger.info('db resumed')
-        except ImportError:
-            loger.error(
-                'db corrupted: q unfinished jobs %d' % (
-                    self.db.processing
-                )
-            )
-            return False
-        except Exception as e:
-            loger.error('db resume failed:' +
-                            type(e).__name__ +
-                            str(e)
-                        )
-            return False
-
-        return True
-
+            if not self.load(self.fname):       # restore existing database
+                self.load(self.fname_bck)       # roll back to backup
 
     def save(self, fname):
-        """
-        Saves existing database using the dill package.
-        Notice that pickle package can't handle objects
-        with mutex lock. Hence, dill is used instead of pickle
-        :return:
-        """
-        loger.info('Saving db')
-        if not self.db.processing == 0:
-                loger.error(
-                    'db corrupted: q unfinished jobs %d' %
-                    (
-                        self.db.processing
-                    )
-                )
-                return False
+        try:
+            self.db.save(fname)
+            loger.info('db saved to ' + fname)
+        except Exception as e:
+            msg = 'Database save failed! Active threads still accessing the database'
+            loger.error(msg)
+            raise e
 
-        with open(fname, 'wb') as f:
-                dill.dump(self.db, f)
-                loger.info('db saved to ' + fname)
-                return True
-
-    def clean(self):
-        """
-        Cleans before exit:
-        Let the threads finish jobs and save the database.
-        """
-        loger.debug('Cleaning')
-        self.stopThreads()
-        self.save(self.fname)
-
+    def load(self, fname):
+        try:
+            self.db.load(fname)
+            return True
+        except Exception as e:
+            msg = 'db loadin failed! %s:%s' % (type(e).__name__, str(e))
+            loger.error(msg)
+        return False
+    
     def backup(self):
         loger.debug('Backup')
         self.stopThreads()
-        self.save(self.fname)
-        self.save(self.fname_bck)
-        self.startThreads()
-
-    def printStatus(self):
-        """
-        Prints some info about current state of downloading.
-        """
-        dt = 2
-        N = 0
-        avg = 0
-        while True:
-            N += 1
-            n0 = self.db.dsize()
-            sleep(dt)
-            n1 = self.db.dsize()
-            v = (n1 - n0) /dt*60
-            avg += (v - avg)/N
-            print 'db-sz %05d\t q-sz %d\t alive: %d \t %d p/m\t avg: %.1f' % (
-                n1,
-                self.db.qsize(),
-                threading.active_count(),
-                v,
-                avg,
-            )
-
-    def threader(self):
-        zoom = 1
-        while not self.exit_flag:
-            pano_id = self.db.dequeue()
-            p = Panorama(pano_id)
-            self.visitPano(p)
-            self.savePano(p, zoom)
-            self.db.task_done()
+        try:
+            self.save(self.fname)
+            shutil.copyfile(self.fname, self.fname_bck)
+        finally:
+            self.startThreads()
 
     def visitPano(self, p):
         """
@@ -157,61 +81,71 @@ class Crawler:
         info about panorama into database. Neighbour
         panoramas are added to the database queue.
         """
-
-        if not p.isValid() or not self.inArea(p):
+        if not (p and p.isValid() and self.inArea(p)):
             return
 
-        gps = p.getGPS()
-        date = p.getDate()
-        neighbours = p.getAllNeighbours()
-        data = {'latlng': gps, 'date': date}
-
-        self.x.append(gps[0])
-        self.y.append(gps[1])
-
-        self.db.add(p.pano_id, data)      # update visited
-        for n in neighbours:
-            self.db.enqueue(n)          # update queue
-
-
+        for n in p.getAllNeighbours():
+            self.db.enqueue(n)            # update queue
+            
+        data = {'latlng': p.getGPS(), 'date': p.getDate()}
+        self.db.add(p.pano_id, data)      # update visited db
+        
     def savePano(self, p, zoom):
         """
         Saves panorama image at given zoom-level and its
         metadata. Directory name corresponds to the first
         two characters of the pano_id hash.
         :param p: Panorama - object
-        :param zoom: int - zoom level
+        :param zoom: int [0-5] iterable - zoom levels
         """
-        if not p or not p.isValid():
-            return
-        fdir = p.pano_id[0:2]
-        fname = p.pano_id
-        fbase = os.path.join(self.dir, fdir, fname)
+        n_threads = 4
 
-        p.saveMeta(fbase + '_meta.json')
-        p.saveTimeMeta(fbase + '_time_meta.json')
-        p.saveImg(fbase + '_zoom_' + str(zoom) + '.jgp')
+        if not (p and p.isValid() and self.inArea(p)):
+            return
+
+        pdir = os.path.join(self.dir, '_' + p.pano_id[0:2])
+        pname = p.pano_id
+        pbase = os.path.join(pdir, pname)
+
+        if not os.path.exists(pdir):
+            os.makedirs(pdir)
+
+        p.saveMeta(pbase + '_meta.json')
+        p.saveTimeMeta(pbase + '_time_meta.json')
+        if self.images:
+            for z in zoom:
+                p.saveImage(pbase + '_zoom_' + str(z) + '.jpg', z, n_threads)
+
+    def threader(self):
+        while not self.exit_flag:
+            pano_id = self.db.dequeue()
+            if self.db.isSentinel(pano_id):
+                self.db.task_done()
+                return
+            p = Panorama(pano_id)
+            self.visitPano(p)
+            self.savePano(p, self.zoom)
+            self.db.task_done()
 
     def startThreads(self):
         self.exit_flag = False
-        # Starting threads
         for j in range(self.n_thr):
-            t = threading.Thread(target=self.threader)
-            t.start()
-            self.threads[j] = t
+            self.threads[j] = threading.Thread(target=self.threader)
+            self.threads[j].start()
         loger.debug('Threads started')
 
     def stopThreads(self):
-        self.exit_flag = True
-        # Stopping threads
+        for _ in self.threads:
+            self.db.prependSentinel()
+
         for t in self.threads:
             t.join()
         loger.debug('Threads stopped')
 
-    def backupPeriodic(self):
-        while True:
-            sleep(self.t_save)
-            self.backup()
+    def onexit(self):
+        loger.debug('Exiting')
+        self.stopThreads()
+        self.save(self.fname)
 
     def run(self):
         """
@@ -220,64 +154,98 @@ class Crawler:
         while latter periodically prints state of downloading. Saving the current
         state at KeyboardInterrupt is handled.
         """
-        # Threads for BFS
         self.startThreads()
-
-        # Thread for periodic db backup
-        t = threading.Thread(target=self.backupPeriodic)
-        t.daemon = True
-        t.start()
-
-        # Thread that prints a progress
-        t = threading.Thread(target=self.printStatus)
-        t.daemon = True
-        t.start()
+        monitor = Monitor(self.db)
+        backuper = Backuper(self.backup, self.t_save)
 
         try:
-            # Enqueueing the first job
-            p = Panorama(self.start_id, self.start_latlng)
-            self.db.enqueue(p.pano_id)
+            while not self.db.isCompleted():
+                monitor.printReport()
+                backuper.check()
+                time.sleep(2)
 
-            while not self.db.q.unfinished_tasks == 0:
-                sleep(1)
-            self.db.join()
+
+            print('All panorama collected')
         except (KeyboardInterrupt, SystemExit):
             loger.debug('*** handling keyboard or system interrupt')
-            self.clean()
+            #raise
+        except Exception as e:
             raise
+        finally:
+            self.onexit()
 
-        self.save(self.fname)
-        print('All panorama collected')
+class Monitor:
+    def __init__(self, db):
+        self.db = db
+        self.t0 = time.time()
+        self.n0 = db.dsize()
+        self.tl = self.t0
+        self.nl = self.n0
 
+    def printReport(self):
+        t = time.time()
+        n = self.db.dsize()
+
+        avg = (n - self.n0)/(t - self.t0)*60
+        v = (n - self.nl)/(t - self.tl)*60
+
+        print 'DB size: %06d\t Q size: %05d\t %05d/min\t avg %05d/min' % \
+              (n, self.db.qsize(), v, avg)
+
+        self.tl = t
+        self.nl = n
+
+class Backuper:
+    def __init__(self, backupFnc, period):
+        self.tl = time.time()
+        self.backupFnc = backupFnc
+        self.period = period
+
+    def check(self):
+        t = time.time()
+        if (t-self.tl) > self.period:
+            self.backupFnc()
+            print 'Backed up!'
+            self.tl = time.time()
 
 def plotData(fname):
-    with open(fname) as f:
-        db = pickle.load(f)
+    db = Database()
+    db.load(fname)
     d = db.d
     lat = [d[key]['latlng'][0] for key in d]
     lng = [d[key]['latlng'][1] for key in d]
-    lat = [lat[j] for j in range(0,len(lat),100)]
-    lng = [lng[j] for j in range(0,len(lng),100)]
+    lat = [lat[j] for j in range(0,len(lat),1)]
+    lng = [lng[j] for j in range(0,len(lng),1)]
     h = plt.plot(lng, lat, '.')
+    plt.grid()
+
     return h
-
-def validator_L2(latlng_0, dst):
-
-    def isClose(p):
-        ltln = p.getGPS()
-        d = sqrt((latlng_0[0] - ltln[0])**2 + (latlng_0[1] - ltln[1])**2)
-        return d<dst
-
-    return isClose
 
 
 if __name__ == '__main__':
-    pass
-    latlng_0 = (50, 14.41)
-    l2 = validator_L2((50, 14.41), 0.001)
-    #plotData(fname)
-    c = Crawler(latlng=latlng_0, label='test', validator=l2)
+    ll_Praha = (50.0833, 14.4167)
+    ll_Berk = (37.8734834, -122.2593292)
+    ll_Berk3 = (37.8734834, -122.2593292-0.01)
+
+    # PARAMETERS
+    ll0 = ll_Praha
+    lbl = 'testPraha'
+    z = [0, 4]                   # zoom-level
+    r = 500                 # radius
+    #_______________
+
+    print ll0
+
+    # Setting up loger
+    l_fmt = '%(asctime)s %(levelname)s: %(message)s'      # format
+    l_dfmt = '%m/%d/%Y %I:%M:%S %p'                       # date format
+    l_fname = 'err_'+lbl+'.log'                           # file name
+    logging.basicConfig(filename=l_fname, format=l_fmt, datefmt=l_dfmt)
+
+    circle = validator.circle(ll0, r)
+    c = Crawler(latlng=ll0, label=lbl, zoom=z, validator=circle, root='../data', images=True)
     c.run()
-    del c
+    h = plotData(c.fname)
+    plt.show()
     pass
 

@@ -1,4 +1,3 @@
-
 from Queue import Queue
 from io import BytesIO
 from itertools import product
@@ -19,10 +18,12 @@ from numpy import array
 # google servers
 
 headers = {
-    'User-agent': 'custom browser'      # may be used later to fool server
+    'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0'      # may be used later to fool server
 }
 
+
 loger = logging.getLogger('panorama')
+loger.setLevel(logging.WARNING)
 
 class Panorama:
     pano_id = None
@@ -77,11 +78,8 @@ class Panorama:
         except Exception as e:
             w = '%s \t %.6f %.6f \t spatial neighbours not found,\n' \
                 '%s: %s' % (
-                self.pano_id,
-                self.getGPS()[0],
-                self.getGPS()[1],
-                type(e).__name__,
-                str(e)
+                self.pano_id, self.getGPS()[0], self.getGPS()[1],
+                type(e).__name__, str(e)
             )
             loger.warn(w)
 
@@ -93,26 +91,24 @@ class Panorama:
         timemachine metadata.
         :return: list of tuples (pano_id, 'year, month')
         """
+        #TODO: tt = (None, None)... return tt, following the same pattern
+        # as e.g. getGPS
         try:
             aux = self.time_meta[1][0][5][1]  # interesting part of the meta list
 
-            # Get timestamps of available timemachine
-            if len(aux)<8 or not aux[8]:
-                return None
-
+            # Get timestamps of available time machine panoramas
             tstamps = []
             for x in aux[8]:
                 tstamps.append('%d, %d' % tuple(x[1]))  # year, month
 
             # Get corresponding panoID hashes
-            pano_ids = ['' for x in range(len(tstamps))]  # empty string list alloc
+            pano_ids = [''] * len(tstamps)              # empty string list alloc
             for j in range(1, len(tstamps) + 1):
-                pano_ids[-j] = aux[3][0][-j][0][1]  # pano_id hash string
+                pano_ids[-j] = aux[3][0][-j][0][1]      # pano_id hash string
         except Exception as e:
-            w = '%s \t %.6f %.6f\t temporal neighbours not found' % (
-                self.pano_id,
-                self.getGPS()[0],
-                self.getGPS()[1]
+            w = '%s \t %.6f %.6f\t temporal neighbours not found\n %s:%s' % (
+                    self.pano_id, self.getGPS()[0], self.getGPS()[1],
+                    type(e).__name__, str(e)
                 )
             loger.warn(w)
             return None
@@ -155,13 +151,13 @@ class Panorama:
         sn = self.getSpatialNeighbours()
         tn = self.getTemporalNeighbours()
         if not tn and not sn:
-            return []
+            return []                           # no neighbours at all
         elif tn and sn:
-            return (sn + [x for x,t in tn])
+            return (sn + [x for x,t in tn])     # both temporal and spatial
         elif sn:
-            return sn
+            return sn                           # spatial neighbours only
         else:
-            return [x for x,t in tn]
+            return [x for x,t in tn]            # temporal neighbours only
 
     def getImage(self, zoom = 5, n_threads = 16):
         """
@@ -173,14 +169,21 @@ class Panorama:
         :param n_threads:
         :return: Image - panorama at given zoom level
         """
+
         tw, th = self.numTiles(zoom)
         tiles = tw*th*[None]
 
+        sentinel = object()
         def worker(q):
             while True:
-                x,y = q.get()
+                item = q.get()
+                if item is sentinel:
+                    q.task_done()
+                    break
+                x,y = item
                 tiles[y+th*x] = self.getTile(x,y,zoom)
                 q.task_done()
+
 
         # Starting threads
         q = Queue()
@@ -193,6 +196,9 @@ class Panorama:
         # Queueing jobs
         for xy in product(range(tw), range(th)):
             q.put(xy)
+        # Queueing sentinels that quit the threads
+        for _ in range(n_threads):
+            q.put(sentinel)
 
         q.join()            # all jobs finished
 
@@ -237,11 +243,11 @@ class Panorama:
         """
         # Switch
         return [
-            (1,1),
-            (2,1),
-            (4,2),
-            (7,4),
-            (13,7),
+            (1, 1),
+            (2, 1),
+            (4, 2),
+            (7, 4),
+            (13, 7),
             (26, 13)
         ][zoom]
 
@@ -267,7 +273,6 @@ class Panorama:
     def getMeta(self):
         """
         Gets raw metadata of the panorama.
-        :param pano_id: string -  panoID hash
         :return: dictionary - data from returned JSON
         """
 
@@ -352,14 +357,14 @@ class Panorama:
         with open(fname, 'w') as f:
             json.dump(self.meta, f)
 
-    def saveImage(self, fname, zoom=5):
+    def saveImage(self, fname, zoom=5, n_threads=16):
         """
         Fetches panorama image at given zoom-level
         and saves as JPEG.
         :param fname: string - filename
         :param zoom: int [0-5] - zoom-level
         """
-        img = self.getImage(zoom)
+        img = self.getImage(zoom, n_threads)
         img.save(fname, 'JPEG')
 
     def requestData(self, url, query, headers=None):
@@ -442,7 +447,15 @@ class Panorama:
         return s
 
 if __name__ == '__main__':
-    while True:
+    for _ in range(3):
         print '.'
+        ll_Berk = (37.8734834, -122.2593292)
+        print 'pano by ll'
+        p = Panorama(latlng=ll_Berk)
+        print 'pano by id'
         p = Panorama('u0KmGAG72ouXlVQ8_HtUrA')
-        pass
+        print 'img'
+        img = p.getImage(2,4)
+        print 'done'
+        sleep(2)
+        del p
