@@ -212,7 +212,7 @@ class Panorama:
         box = self.cropSize(zoom)
         return pano.crop(box)
 
-    def getTile(self, x, y, zoom = 5):
+    def getTile(self, x, y, zoom=5):
         """
         Gets panorama image tile 512x512 at position (x,y)
         :param x: int - tile coordinate horizontal
@@ -291,6 +291,9 @@ class Panorama:
         }
 
         msg = self.requestData(url, query, headers)
+        if not msg:
+            return None
+
         jsons = None
         try:
             jsons = json.loads(msg)
@@ -318,6 +321,8 @@ class Panorama:
         }
 
         msg = self.requestData(url, query, headers)      # .js file as string
+        if not msg:
+            return None
 
         # Handle a content of the .js file retrieved form the server
         # Here again - reverse engineerd. The js file contains
@@ -380,15 +385,21 @@ class Panorama:
         query_str = urlencode(query).encode('ascii')
         u = None
         # Handle loose internet connection via loop
-        while True:
+        err = None
+        for _ in range(10):
             try:
                 u = requests.get(url + "?" + query_str, headers=headers)
             except Exception as e:
                 print type(e).__name__ + str(e)
                 print 'waiting for connection...'
-                sleep(10)
+                err = e
+                sleep(2)
             if u:
                 break
+        else:
+            loger.error('%s %s:%s' % (self.pano_id,(err).__name__, str(err)))
+            print 'Panorama loading error'
+            return None
 
         msg = u.content
         return msg
