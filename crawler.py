@@ -103,6 +103,9 @@ class Crawler:
         if not (p and p.isValid() and self.inArea(p)):
             return
 
+        if p.isCustom():
+            return          # not Google panorama
+
         pdir = os.path.join(self.dir, '_' + p.pano_id[0:2])
         pname = p.pano_id
         pbase = os.path.join(pdir, pname)

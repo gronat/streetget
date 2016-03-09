@@ -65,6 +65,24 @@ class Panorama:
         """ Panorama without metadata is not valid """
         return len(self.meta) > 0
 
+    def isCustom(self):
+        """ Is it custom google panorama? """
+        if not self.isValid():
+            return False
+        aux = re.match(r'.*Google.*', self.meta['Data']['copyright'])
+        return aux is None
+
+    def hasZoom(self, zoom):
+        """
+        Checks if zomm level is available.
+        :param zoom: int [0-5]
+        :return: boolean
+        """
+        if not self.isValid():
+            return False
+        z = int(self.meta['Location']['zoomLevels'])
+        return z >= zoom
+
     def getSpatialNeighbours(self):
         """
         Reads metadata returned from getMeta() and extracts
@@ -159,7 +177,7 @@ class Panorama:
         else:
             return [x for x,t in tn]            # temporal neighbours only
 
-    def getImage(self, zoom = 5, n_threads = 16):
+    def getImage(self, zoom=5, n_threads=16):
         """
         Gets panorama image at given zoom level. The image
         consists of image tiles that are fetched and stitched
@@ -169,9 +187,13 @@ class Panorama:
         :param n_threads:
         :return: Image - panorama at given zoom level
         """
+        if self.isCustom():
+            raise NotImplementedError('Custom panorama is not implemented')
 
         tw, th = self.numTiles(zoom)
         tiles = tw*th*[None]
+
+        n_threads = min(n_threads, tw*th)
 
         sentinel = object()
         def worker(q):
@@ -181,7 +203,7 @@ class Panorama:
                     q.task_done()
                     break
                 x,y = item
-                tiles[y+th*x] = self.getTile(x,y,zoom)
+                tiles[y+th*x] = self.getTile(x, y, zoom)
                 q.task_done()
 
 
@@ -196,7 +218,7 @@ class Panorama:
         # Queueing jobs
         for xy in product(range(tw), range(th)):
             q.put(xy)
-        # Queueing sentinels that quit the threads
+        # Queueing sentinels to exit the threads
         for _ in range(n_threads):
             q.put(sentinel)
 
@@ -388,16 +410,17 @@ class Panorama:
         err = None
         for _ in range(10):
             try:
+                print 'requesting'
                 u = requests.get(url + "?" + query_str, headers=headers)
             except Exception as e:
                 print type(e).__name__ + str(e)
                 print 'waiting for connection...'
                 err = e
-                sleep(2)
             if u:
+                print 'Yesssss!'
                 break
         else:
-            loger.error('%s %s:%s' % (self.pano_id,(err).__name__, str(err)))
+            loger.error('%s %s:%s' % (self.pano_id,type(err).__name__, str(err)))
             print 'Panorama loading error'
             return None
 
@@ -437,9 +460,6 @@ class Panorama:
         print  "Estimated crop size: \t%d \t%d" % (col, row)
         print '_______________________________________'
 
-
-
-
     def __str__(self):
         s = ''
         s+= 'panoID %s\n' % self.pano_id
@@ -458,15 +478,7 @@ class Panorama:
         return s
 
 if __name__ == '__main__':
-    for _ in range(3):
-        print '.'
-        ll_Berk = (37.8734834, -122.2593292)
-        print 'pano by ll'
-        p = Panorama(latlng=ll_Berk)
-        print 'pano by id'
-        p = Panorama('u0KmGAG72ouXlVQ8_HtUrA')
-        print 'img'
-        img = p.getImage(2,4)
-        print 'done'
-        sleep(2)
-        del p
+    pid = 'flIERJS9Lk4AAAQJKfjPkQ'
+    p = Panorama(pid)
+    p.getImage(0)
+    pass
