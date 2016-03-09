@@ -410,14 +410,12 @@ class Panorama:
         err = None
         for _ in range(10):
             try:
-                print 'requesting'
                 u = requests.get(url + "?" + query_str, headers=headers)
             except Exception as e:
                 print type(e).__name__ + str(e)
-                print 'waiting for connection...'
+                print 'URL request retry...'
                 err = e
             if u:
-                print 'Yesssss!'
                 break
         else:
             loger.error('%s %s:%s' % (self.pano_id,type(err).__name__, str(err)))
