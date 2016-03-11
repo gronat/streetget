@@ -1,6 +1,5 @@
 import threading
 import os
-import dill
 import logging
 import validator
 import matplotlib.pyplot as plt
@@ -14,7 +13,7 @@ loger.setLevel(logging.DEBUG)
 
 class Crawler:
     t_save  = 300                # backup db every 10min
-    n_thr   = 16                 # No. of crawling threads
+    n_thr   = 4                  # No. of crawling threads
 
     def __init__(self,
                     latlng=None, pano_id=None, label='myCity',
@@ -29,7 +28,7 @@ class Crawler:
         self.fname = os.path.join(root, label, 'db.pickle')
         self.fname_bck = self.fname + '.bck'
 
-        self.zoom = zoom if isinstance(zoom, list) else [zoom]
+        self.zoom = zoom if isinstance(zoom, list) else [zoom]  # zoom must be a list
         self.start_id = pano_id
         self.start_latlng = latlng
         self.inArea = validator
@@ -40,13 +39,15 @@ class Crawler:
 
         self.images = images
 
-        if not os.path.exists(self.dir):        # new dataset
+        if not os.path.exists(self.dir):        # create dir
             os.makedirs(self.dir)
+
+        if os.path.exists(self.fname):          # resume existing crawler db
+            if not self.load(self.fname):
+                self.load(self.fname_bck)       # roll back to backup
+        else:                                   # new  crawler db
             p = Panorama(self.start_id, self.start_latlng)
             self.db.enqueue(p.pano_id)          # starting panorama into a queue
-        else:
-            if not self.load(self.fname):       # restore existing database
-                self.load(self.fname_bck)       # roll back to backup
 
     def save(self, fname):
         try:
@@ -118,40 +119,46 @@ class Crawler:
 
         p.saveMeta(pbase + '_meta.json')
         p.saveTimeMeta(pbase + '_time_meta.json')
-        if self.images:
-            for z in zoom:
+        
+        if not self.images:     # not saving images
+            return
+            
+        for z in zoom:
+            if p.hasZoom(z):
                 p.saveImage(pbase + '_zoom_' + str(z) + '.jpg', z, n_threads)
 
-    def threader(self):
+    def worker(self):
         while not self.exit_flag:
             pano_id = self.db.dequeue()
             if self.db.isSentinel(pano_id):
                 self.db.task_done()
                 return
             p = Panorama(pano_id)
-            self.visitPano(p)
             self.savePano(p, self.zoom)
+            self.visitPano(p)
             self.db.task_done()
 
     def startThreads(self):
         self.exit_flag = False
         for j in range(self.n_thr):
-            self.threads[j] = threading.Thread(target=self.threader)
+            self.threads[j] = threading.Thread(target=self.worker)
             self.threads[j].start()
         loger.debug('Threads started')
 
     def stopThreads(self):
         for _ in self.threads:
-            self.db.prependSentinel()
+            self.db.prependSentinel()   # sentinel exits thread
 
         for t in self.threads:
             t.join()
         loger.debug('Threads stopped')
 
     def onexit(self):
+        print 'Sopping threads and saving.... please wait.'
         loger.debug('Exiting')
         self.stopThreads()
         self.save(self.fname)
+        print 'Done'
 
     def run(self):
         """
@@ -166,12 +173,12 @@ class Crawler:
 
         try:
             while not self.db.isCompleted():
-                monitor.printReport()
-                backuper.check()
+                monitor.printReport()           # display current state
+                backuper.check()                # periodic backup
                 time.sleep(2)
 
-
             print('All panorama collected')
+
         except (KeyboardInterrupt, SystemExit):
             loger.debug('*** handling keyboard or system interrupt')
             #raise
