@@ -45,10 +45,13 @@ Options:
 import pickle
 import validator
 import os
+import sys
 from docopt import docopt
 from crawler import Crawler
 
+
 class Arguments:
+    cmds = None
     label = None
     root = None
     images = None
@@ -77,9 +80,11 @@ def parse(a):
     if args['resume']:
         with open(fname) as f:
             a = pickle.load(f)
+        print '\nResuming command:'
+        print a.cmds + '\n'
     else:
         if os.path.exists(fname):
-            msg = '\n"%s" already crawled. Use resume to continue crawling.' % (a.label,)
+            msg = '\n"%s" already crawled. Use "resume" (see --help) to continue crawling.' % (a.label,)
             raise AssertionError(msg)
 
     # Create area validator for crawler
@@ -104,8 +109,14 @@ def launch(a, pvalid):
     c.run()
 
 if __name__ == '__main__':
+    s = sys.argv
+
     args = docopt(__doc__, version='0.0.1')
     a = Arguments()
+
+    # CLI command
+    s[0] = os.path.basename(s[0])
+    a.cmds = " ".join(s)            # command string
 
     # Path stuff
     a.label = args['LABEL']
