@@ -3,7 +3,7 @@
 `streetget` is a small python package for StreetView image downloading. It allows to you to crawl and download the StreetView panoramas along with its metadata and **depth maps**. It also allows you to download the StreetView **time-machine**, historical panoramas.
 
 ### Quick start:
-**Example 1:** _Prague_ is a beautiful city! Download panoramas inside a rectangle of the with 1.5 _km_ and height 1 _km_ centered at 50.0833° N, 14.4167°E. Download panoramas of the zoom levels 0, 3 and 5, store metadata, depth-map data and the depth-map thumbnails. Download also historical panoramas, save the data to `/local/myData` and name the dataset 'insidePrague_all'.
+**Example 1:** _Prague_ is a beautiful city! Download panoramas inside a rectangle of the with 1.5 _km_ and height 1 _km_ centered at 50.0833° N, 14.4167°E. Download panoramas of the zoom levels 0, 3 and 5, store metadata, depth-map data and the depth-map thumbnails. Download also historical panoramas, save the data to `/local/myData` and name the dataset 'Prague_all'.
 
 `streetget box 50.0833°N, 14.4167°N 300 -itd -z 0,3,5 -D /local/myData  Prague_all`
 
@@ -11,11 +11,11 @@
 
 `streetget resume -D /local/myData    Prague_all`
 
-**Example 3:** Fetch only StreetView metadata from circular area of the radius _300m_ starting at GPS location 48.8567°N 2.3508°N,  label of the data is 'Paris' and it will be saved into `~/datasets` directory:
+**Example 3:** Fetch only StreetView metadata from circular area of the radius _300m_ starting at GPS location 48.8567°N 2.3508°N,  label of the data as 'Paris' and save it into `~/datasets` directory:  
 
 `streetget circle 48.8567 2.3508 300 -D ~/datasets Paris`
 
-**Example 4:** Get info about available panoramas at location 50.0833°N, 14.4167°N.
+**Example 4:** Get info about available panoramas at location 50.0833°N, 14.4167°N.  
 `streetget info 50.0833 14.4167`
 #####Output:
 	latlng: 50.083470, 14.416540
@@ -34,7 +34,7 @@
 	rkQFq5F8JgdTbfBEt1pbBQ 2011, 8
 	c4JXOQ0o1QkdEBMdSWgBwA 2012, 3
 
-**Example 6:** Show the panorama image given by panorama hash id 6llp-LT4nAtCfs1SsyNyYA:
+**Example 6:** Show the panorama image given by panorama hash id 6llp-LT4nAtCfs1SsyNyYA:  
 `streetget show 6llp-LT4nAtCfs1SsyNyYA`
 
 ### Installation:
@@ -77,7 +77,7 @@ The package is tested with Python 2.7  and requires several packages such as _ut
     W, H                Width and height in meters.
     R                   Radius in meters.
 
->**Note**: A MINUS sign (dash) is NOT allowed for negative numbers. Instead use letter 'n' to indicate negative number. E.g. use n1.23 instead -1.23.
+>**Note**: A MINUS sign (dash) is NOT allowed for negative numbers. Instead use letter 'n' to indicate negative value. E.g. use n1.23 instead -1.23.
 
 ###Options:
     -t          Time machine, include temporal panorama neighbours.
