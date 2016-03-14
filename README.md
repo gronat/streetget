@@ -5,17 +5,15 @@
 ### Quick start:
 **Example 1:** _Prague_ is a beautiful city! Download panoramas inside a rectangle of the with 1.5 _km_ and height 1 _km_ centered at 50.0833° N, 14.4167°E. Download panoramas of the zoom levels 0, 3 and 5, store metadata, depth-map data and the depth-map thumbnails. Download also historical panoramas, save the data to `/local/myData` and name the dataset 'Prague_all'.
 
-`streetget box 50.0833°N, 14.4167°N 300 -itd -z 0,3,5 -D /local/myData  Prague_all`
+`streetget box 50.0833 14.4167 300 -itd -z 0,3,5 -D /local/myData  Prague_all`
 
-**Example 2:** Restore previous _Prague_ download after **Ctrl-c** keyboard interrupt or forced computer shutdown.
-
+**Example 2:** Restore previous _Prague_ download after **Ctrl-c** keyboard interrupt or forced computer shutdown.  
 `streetget resume -D /local/myData    Prague_all`
 
-**Example 3:** Fetch only StreetView metadata from circular area of the radius _300m_ starting at GPS location 48.8567°N 2.3508°N,  label of the data as 'Paris' and save it into `~/datasets` directory:  
-
+**Example 3:** Fetch only StreetView metadata from circular area of the radius _300m_ starting at GPS location 48.8567°N 2.3508°E,  label of the data as 'Paris' and save it into `~/datasets` directory:  
 `streetget circle 48.8567 2.3508 300 -D ~/datasets Paris`
 
-**Example 4:** Get info about available panoramas at location 50.0833°N, 14.4167°N.  
+**Example 4:** Get info about available panoramas at location 50.0833°N, 14.4167°E.  
 `streetget info 50.0833 14.4167`
 #####Output:
 	latlng: 50.083470, 14.416540
