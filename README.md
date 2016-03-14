@@ -3,15 +3,15 @@
 `streetget` is a small python package for StreetView image downloading. It allows to you to crawl and download the StreetView panoramas along with its metadata and **depth maps**. It also allows you to download the StreetView **time-machine**, historical panoramas.
 
 ### Quick start:
-**Example 1:** _Prague_ is beautiful city! Download panoramas inside a rectangle of the with 1.5 _km_ and height 1 _km_ centered at 50.0833° N, 14.4167°E. Download panoramas of the zoom levels 0, 3 and 5, store metadata, depth-map data and the depth-map thumbnails. Download also historical panoramas, save the results to `/local/myData` and name the dataset `Prague_all`.
+**Example 1:** _Prague_ is a beautiful city! Download panoramas inside a rectangle of the with 1.5 _km_ and height 1 _km_ centered at 50.0833° N, 14.4167°E. Download panoramas of the zoom levels 0, 3 and 5, store metadata, depth-map data and the depth-map thumbnails. Download also historical panoramas, save the data to `/local/myData` and name the dataset 'insidePrague_all'.
 
 `streetget box 50.0833°N, 14.4167°N 300 -itd -z 0,3,5 -D /local/myData  Prague_all`
 
-**Example 2:** Restore previous _Prague_ download after **Ctrl-c** keyboard interrupt.
+**Example 2:** Restore previous _Prague_ download after **Ctrl-c** keyboard interrupt or forced computer shutdown.
 
 `streetget resume -D /local/myData    Prague_all`
 
-**Example 3:** Fetch only metadata of StreetView starting at GPS location 48.8567°N 2.3508°N, label of the data is 'Paris' and it will be saved into `~/datasets` directory:
+**Example 3:** Fetch only StreetView metadata from circular area of the radius _300m_ starting at GPS location 48.8567°N 2.3508°N,  label of the data is 'Paris' and it will be saved into `~/datasets` directory:
 
 `streetget circle 48.8567 2.3508 300 -D ~/datasets Paris`
 
@@ -38,8 +38,7 @@
 `streetget show 6llp-LT4nAtCfs1SsyNyYA`
 
 ### Installation:
-The package is tested with Python 2.7  and requires several packages such as 'utm, matplotlib, numpy, docopt, pickle, PIL, Queue'. No installation is needed.
-Just clone the 'streetget' to any directory e.g. `/home/user/streetget/` and inside the directory do `chmod 755 streetget.py`. Create a symbolic link `sudo ln -s  /home/user/streetget/streetget.py streetget` or add alias to your `.bash_aliases`.  You can also run the script directly calling `streetget.py` with arguments.
+The package is tested with Python 2.7  and requires several packages such as _utm, matplotlib, numpy, docopt, pickle, PIL, Queue_. No installation is needed fot the script itself. Just clone the 'streetget' to any directory e.g. `/home/user/streetget/` and inside the directory do `chmod 755 streetget.py`. Create a symbolic link `sudo ln -s  /home/user/streetget/streetget.py /usr/bin/streetget` or add alias to your `.bash_aliases`.  You can also run the script directly calling the `streetget.py` with arguments.
 
 ###Usage:
 	 streetget circle ( (LAT LNG) | PID) R [-tid -D DIR -z ZOOM] LABEL
@@ -47,7 +46,7 @@ Just clone the 'streetget' to any directory e.g. `/home/user/streetget/` and ins
 	 streetget gpsbox LAT LNG LAT_TL LNG_TL LAT_BR LNG_BR [options] LABEL
 	 streetget resume [-D DIR] LABEL
 	 streetget info ( (LAT LNG) | PID)
-     streetget show PID
+	 streetget show PID
 
 
 
@@ -85,7 +84,7 @@ Just clone the 'streetget' to any directory e.g. `/home/user/streetget/` and ins
     -i          Save images, if unset only metadata are fetched and saved.
     -d          Save depth data and depth map thumbnails at zoom level 0.
     -z ZOOM     Comma separated panorama zoom levels [0-5] to be
-                download [default: 0,5]
+                downloaded [default: 0,5]
     -D DIR      Root directory. Data will be saved in DIR/LABEL/
                 [default: ./]
     -h, --help  Prints this screen.
