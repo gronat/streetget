@@ -2,7 +2,6 @@ import threading
 import os
 import logging
 import validator
-import matplotlib.pyplot as plt
 import shutil
 from panorama import Panorama
 from database2 import Database
@@ -12,12 +11,13 @@ loger = logging.getLogger('crawler')
 loger.setLevel(logging.DEBUG)
 
 class Crawler:
-    t_save  = 300                # backup db every 10min
+    t_save  = 300                # backup db every 5min
     n_thr   = 4                  # No. of crawling threads
 
     def __init__(self,
-                    latlng=None, pano_id=None, label='myCity',
-                    root='myData', validator=None, zoom=5, images=False
+                    latlng=None, pano_id=None, validator=None,
+                    root='myData', label='myCity', zoom=5,
+                    images=False, depth=False, time=True
                  ):
         if not latlng and not pano_id:
             raise ValueError('start point (latlng or pano_id) not given')
@@ -38,6 +38,8 @@ class Crawler:
         self.exit_flag = False                  # flag for signaling threads
 
         self.images = images
+        self.depth = depth
+        self.time = time
 
         if not os.path.exists(self.dir):        # create dir
             os.makedirs(self.dir)
@@ -85,7 +87,8 @@ class Crawler:
         if not (p and p.isValid() and self.inArea(p)):
             return
 
-        for n in p.getAllNeighbours():
+        neighbours = p.getAllNeighbours() if self.time else p.getSpatialNeighbours()
+        for n in neighbours:
             self.db.enqueue(n)            # update queue
 
         if p.isCustom():
@@ -119,13 +122,15 @@ class Crawler:
 
         p.saveMeta(pbase + '_meta.json')
         p.saveTimeMeta(pbase + '_time_meta.json')
-        
-        if not self.images:     # not saving images
-            return
-            
-        for z in zoom:
-            if p.hasZoom(z):
-                p.saveImage(pbase + '_zoom_' + str(z) + '.jpg', z, n_threads)
+
+        if self.images:
+            for z in zoom:
+                if p.hasZoom(z):
+                    p.saveImage(pbase + '_zoom_' + str(z) + '.jpg', z, n_threads)
+        dzoom = 0
+        if self.depth:
+            p.saveDepthData(pbase+'_depth.json')
+            p.saveDepthImage(pbase+'_zoom_0_depth.jpg', dzoom)
 
     def worker(self):
         while not self.exit_flag:
@@ -175,7 +180,7 @@ class Crawler:
             while not self.db.isCompleted():
                 monitor.printReport()           # display current state
                 backuper.check()                # periodic backup
-                time.sleep(2)
+                time.sleep(5)
 
             print('All panorama collected')
 
@@ -183,7 +188,7 @@ class Crawler:
             loger.debug('*** handling keyboard or system interrupt')
             #raise
         except Exception as e:
-            raise
+            raise e
         finally:
             self.onexit()
 
@@ -221,20 +226,6 @@ class Backuper:
             print 'Backed up!'
             self.tl = time.time()
 
-def plotData(fname):
-    db = Database()
-    db.load(fname)
-    d = db.d
-    lat = [d[key]['latlng'][0] for key in d]
-    lng = [d[key]['latlng'][1] for key in d]
-    lat = [lat[j] for j in range(0,len(lat),1)]
-    lng = [lng[j] for j in range(0,len(lng),1)]
-    h = plt.plot(lng, lat, '.')
-    plt.grid()
-
-    return h
-
-
 if __name__ == '__main__':
     ll_Praha = (50.0833, 14.4167)
     ll_Berk = (37.8734834, -122.2593292)
@@ -243,22 +234,15 @@ if __name__ == '__main__':
     # PARAMETERS
     ll0 = ll_Praha
     lbl = 'testPraha'
-    z = [0, 4]                   # zoom-level
+    z = [0, 3]              # zoom-level
     r = 500                 # radius
     #_______________
 
     print ll0
 
-    # Setting up loger
-    l_fmt = '%(asctime)s %(levelname)s: %(message)s'      # format
-    l_dfmt = '%m/%d/%Y %I:%M:%S %p'                       # date format
-    l_fname = 'err_'+lbl+'.log'                           # file name
-    logging.basicConfig(filename=l_fname, format=l_fmt, datefmt=l_dfmt)
 
     circle = validator.circle(ll0, r)
-    c = Crawler(latlng=ll0, label=lbl, zoom=z, validator=circle, root='../data', images=True)
+    c = Crawler(latlng=ll0, label=lbl, zoom=z, validator=circle, root='../data', images=True, depth=True, time=False)
     c.run()
-    h = plotData(c.fname)
-    plt.show()
     pass
 

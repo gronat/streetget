@@ -1,10 +1,12 @@
 #! /usr/bin/python
 """
 Usage:
-    streetget circle LAT LNG R [-i -d DIR -z ZOOM] LABEL
-    streetget box LAT LNG W H [-i -d DIR -z ZOOM] LABEL
+    streetget circle ( (LAT LNG) | PID) R [-tid -D DIR -z ZOOM] LABEL
+    streetget box ( (LAT LNG) | PID) W H [-tid -D DIR -z ZOOM] LABEL
     streetget gpsbox LAT LNG LAT_TL LNG_TL LAT_BR LNG_BR [options] LABEL
-    streetget resume [-d DIR] LABEL
+    streetget resume [-D DIR] LABEL
+    streetget info ( (LAT LNG) | PID)
+    streetget show PID
 
 Commands:
     circle              Downloads street-view inside circular area
@@ -17,15 +19,19 @@ Commands:
                         and bottom-right corner LAT_BR, LNG_BR. Download
                         starts at location LAT, LNG
     resume              Resumes interrupted downloading. Only
-                        directory flag -d DIR is allowed. Other
+                        directory flag -D DIR is allowed. Other
                         flags will be restored from the interrupted
                         session.
-
+    info                Prints info about the closest panorama at LAT,
+                        LNG position or info about panorama id PID.
+    show                Shows panorama image at zoom level 2 in default
+                        python image browser.
 Arguments:
-    LABEL               Data set label. Will be used as directory name.
+    LABEL               Data set label. Will be used as a directory name.
     LAT, LNG            Starting point latitude and longitude.
     LAT_TL, LNG_TL      Top-left corner latitude, longitude.
-    LAT_BR, LNG_BR      Top-left corner latitude, longitude.
+    LAT_BR, LNG_BR      Bottom-right corner latitude, longitude.
+    PID                 Panorama id hash code.
     W, H                Width and height in meters.
     R                   Radius in meters.
 
@@ -34,10 +40,12 @@ NOTE:
     n to indicate negative number. E.g. use n1.23 instead -1.23.
 
 Options:
-    -i          Download images, if not set only metadata are fetched.
+    -t          Time machine, include temporal panorama neighbours.
+    -i          Save images, if unset only metadata are fetched and saved.
+    -d          Save depth data and depth map thumbnails at zoom level 0.
     -z ZOOM     Comma separated panorama zoom levels [0-5] to be
                 download [default: 0,5]
-    -d DIR      Root directory. Data will be saved in DIR/LABEL/
+    -D DIR      Root directory. Data will be saved in DIR/LABEL/
                 [default: ./]
     -h, --help  Prints this screen.
 
@@ -46,25 +54,39 @@ import pickle
 import validator
 import os
 import sys
+import logging
 from docopt import docopt
 from crawler import Crawler
+from panorama import Panorama
 
 
 class Arguments:
     cmds = None
     label = None
     root = None
+    time = None
     images = None
+    depth = None
     zoom = None
     latlng = None
+    panoid = None
     topleft = None
     btmright = None
     circle = None
     box = None
     gpsbox = None
+    resume = None
+    info = None
+    show = None
     pvalid = None
 
 def tofloat(s):
+    """
+    String to float, negative floats are indicated with
+    prepended character 'n'. If input is None it returns None.
+    :param s:
+    :return: float or None
+    """
     if not s:
         return None
     if s[0] is not 'n':
@@ -72,12 +94,31 @@ def tofloat(s):
     return -float(s[1:])
 
 def parse(a):
+    # Info command
+    if a.info:
+        # pano_id has priority over latlng
+        print Panorama(pano_id=a.panoid, latlng=a.latlng)
+        return
+
+    # Show command
+    if a.show:
+        Panorama(pano_id=a.panoid).getImage(2).show()
+        return
+
+    # Setting up loger
+    fdir = os.path.join(a.root, a.label)
+    if not os.path.exists(fdir):
+        os.makedirs(fdir)
+    l_fmt = '%(asctime)s %(levelname)s: %(message)s'        # format
+    l_dfmt = '%m/%d/%Y %I:%M:%S %p'                         # date format
+    l_fname = os.path.join(a.root, a.label, 'crawler.log')  # filepath
+    logging.basicConfig(filename=l_fname, format=l_fmt, datefmt=l_dfmt)
 
     # Filename for command restore
     fname = os.path.join(a.root, a.label, 'crawlerArgs.pickle')
 
-    # Load options for crawler
-    if args['resume']:
+    # Handling resuem command a existing crawler
+    if a.resume:
         with open(fname) as f:
             a = pickle.load(f)
         print '\nResuming command:'
@@ -97,15 +138,15 @@ def parse(a):
     else:
         raise NotImplementedError('Unknown validator')
 
-    if not os.path.exists(os.path.dirname(fname)):
-        os.makedirs(os.path.dirname(fname))
-
     with open(fname, 'w') as f:
         pickle.dump(a, f)
     launch(a, pvalid)
 
 def launch(a, pvalid):
-    c = Crawler(latlng=a.latlng, validator=pvalid, label=a.label, root=a.root, zoom=a.zoom, images=a.images)
+    c = Crawler(pano_id=a.panoid, latlng=a.latlng, validator=pvalid,
+                label=a.label, root=a.root, zoom=a.zoom,
+                images=a.images, depth=a.depth, time=a.time
+                )
     c.run()
 
 if __name__ == '__main__':
@@ -120,16 +161,23 @@ if __name__ == '__main__':
 
     # Path stuff
     a.label = args['LABEL']
-    a.root = args['-d']
+    a.root = args['-D']
 
     # Image related stuff
+    a.time = args['-t']
     a.images = args['-i']
     a.zoom = map(lambda x: int(x), args['-z'].split(','))
+    a.depth = args['-d']
 
     # Area downloading stuff
     a.circle = args['circle']
     a.box = args['box']
     a.gpsbox = args['gpsbox']
+
+    # Auxiliary commands
+    a.resume = args['resume']
+    a.info = args['info']
+    a.show = args['show']
 
     # Params of area
     a.r = tofloat(args['R'])
@@ -137,6 +185,8 @@ if __name__ == '__main__':
 
     # GPS stuff
     a.latlng = (tofloat(args['LAT']), tofloat(args['LNG']))
+    a.latlng = None if a.latlng[0] is None else a.latlng
+    a.panoid = args['PID']
     a.topleft = tofloat(args['LAT_TL']), tofloat(args['LNG_TL'])
     a.btmright = tofloat(args['LAT_BR']), tofloat(args['LNG_BR'])
 

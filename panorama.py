@@ -1,26 +1,28 @@
 from Queue import Queue
 from io import BytesIO
 from itertools import product
-from time import sleep
 from urllib import urlencode
+from struct import Struct
 import threading
 import json
 import re
 import requests
 import sys
 import logging
-
+import numpy as np
 from PIL import Image
 from numpy import array
 
+import matplotlib as mpl
+mpl.use('Agg')                  # avoid Tk window
+import matplotlib.pyplot as plt
+# NOTE: Tkinter a has problem with multithread. Matplotlib directive use('Agg')
+# turns on non-interactive backend and avoids displaying Tk window.
 
-# Headers for URL GET requests, can be used later to fool
-# google servers
-
+# Headers for URL GET requests, can be used in the future to fool google servers:
 headers = {
     'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0'      # may be used later to fool server
 }
-
 
 loger = logging.getLogger('panorama')
 loger.setLevel(logging.WARNING)
@@ -29,12 +31,17 @@ class Panorama:
     pano_id = None
     meta = None
     time_meta = None
+    depthdata = None
+    depthmap = None
+
 
     def __init__(self, pano_id = None, latlng = None):
         if not pano_id and not latlng:
             raise ValueError('pano_id or latlng mus be given')
 
         self.pano_id = pano_id if pano_id else self.getPanoID(latlng)
+        if not self.pano_id:
+            return
         self.meta = self.getMeta()
         self.time_meta = self.getTimeMeta()
 
@@ -58,12 +65,13 @@ class Panorama:
 
         msg = self.requestData(url, query, headers)
         data = json.loads(msg)
-
+        if len(data) is 0:
+            return None
         return data['Location']['panoId'].encode('ascii')
 
     def isValid(self):
         """ Panorama without metadata is not valid """
-        return len(self.meta) > 0
+        return self.meta and len(self.meta) > 0
 
     def isCustom(self):
         """ Is it custom google panorama? """
@@ -164,7 +172,7 @@ class Panorama:
         """
         Returns a list of both spatial and temporal
         panorama neighbours.
-        :return: list  - panoID ahshes
+        :return: list  - panoID hashes
         """
         sn = self.getSpatialNeighbours()
         tn = self.getTemporalNeighbours()
@@ -255,6 +263,130 @@ class Panorama:
         file = BytesIO(msg)
         img = Image.open(file)
         return img
+    
+    def getDepthData(self):
+        encoded = self.meta['model']['depth_map']
+        # Decode
+        encoded += '=' * (len(encoded) % 4)
+        encoded = encoded.replace('-', '+').replace('_', '/')
+        data = encoded.decode('base64').decode('zip')       # base64 encoded
+
+        # Read header
+        hsize = ord(data[0])                # header size in bytes
+        fmt = Struct('< x 3H B')            # little endian, padding byte, 3x unsigned short int, unsigned char
+        n_planes, width, height, offset = fmt.unpack(data[:hsize])
+
+        # Read plane labels
+        n = width * height
+        fmt = Struct('%dB' % n)
+        lbls = fmt.unpack(data[offset:offset+fmt.size])
+        offset += fmt.size
+
+        # Read planes
+        fmt = Struct('< 4f')                # little endian, 4 signed floats
+        planes = []
+        for i in xrange(n_planes):
+            unpacked = fmt.unpack(data[offset:offset+fmt.size])
+            planes.append((unpacked[:3], unpacked[3]))
+            offset += fmt.size
+
+        self.depthdata = (width, height), lbls, planes
+        return self.depthdata
+    
+    def getDepthImg(self, zoom=None):
+        """
+        Computes depth image from depth data given by
+        getDepthData(). Default image size is 5120x256.
+        If zoom is given, the the image is resized to
+        correspond to the panorama image size at given
+        zoom level.
+        :param zoom: int [0-5], default None
+        :return img - PIL Image object
+        """
+        size, lbls, planes = self.depthdata
+        w, h = size
+        pi = np.pi
+
+        # Rays from camera center in spherical coordinates
+        y, x = np.indices((h, w))           # grid of coordinates
+        offset = pi/2                       # no idea why not pi,
+        yaw = (w-1 - x) * 2*pi / (w-1) + offset
+        pitch = (h-1 - y) * pi / (h-1)      # 0 down, pi/2 horizontal, pi up
+
+        # Rays from spherical to cartesian
+        v = np.array([
+            np.sin(pitch) * np.cos(yaw),
+            np.sin(pitch) * np.sin(yaw),
+            np.cos(pitch)
+        ])
+        v = v.transpose(1, 2, 0)
+
+        # w x h x 3 normal, resp. w x h x 1 distance
+        n = np.array([planes[i][0] for i in lbls]).reshape((h, w, 3))
+        d = np.array([planes[i][1] for i in lbls]).reshape((h, w))
+        d[d == 0] = np.nan
+
+        # distance from camera centetr, ray inersection with plane
+        self.depthmap = d / np.abs(np.sum(v * n, axis=2))
+
+        try:
+            plt.imshow(self.depthmap)
+        except Exception as e:
+            msg = type(e).__name__ + e.__str__()
+            loger.error(self.pano_id + ': ' + msg)
+            return Image.new('RGB', (1,1))
+
+        buf = BytesIO()
+        plt.imsave(buf, self.depthmap)
+        buf.seek(0)
+        img = Image.open(buf)
+
+        if zoom:
+            _, _, w, h = self.cropSize(zoom)
+            img = img.resize((w,h), Image.NEAREST)
+        return img
+
+    def saveDepthData(self, fname):
+        """
+        Saves depth data as JSON in following format:
+        data[0] - tuple (width w, height h)
+        data[1] - tuple w x h plane labels
+        data[2] - tuple of the length of # planes
+                  item: ((n_0, n_1, n_2), d) where n_i is
+                  a component of planes normal vector and d
+                  is its distance from camera center.
+
+        Google depth map is prepresented as a set of 3D planes.
+        Hence data[0], data[1] represent a 2D matrix which
+        corresponds to a spherical panorama. Each item of the
+        matrix is a label of a plane. data[2] represents
+        the plane parameters - normal vector and distance.
+
+        :param fname - string, filename
+        """
+        if not self.depthdata:
+            self.getDepthData()
+
+        with open(fname, 'w') as f:
+            json.dump(self.depthdata, f)
+
+    def saveDepthImage(self, fname, zoom=None):
+        """
+        Saves the corresponding depth mpa image using the
+        depth map data from getDepthData(). Default image size
+        is 512x256. If zoom is given, the the image is resized
+        to correspond to the panorama image size at given zoom level.
+
+        :param fname: string file name
+        :param zoom: int [0-5], default None
+        """
+        if not self.depthdata:
+            self.getDepthData()
+
+        img = self.getDepthImg(zoom)
+        with open(fname, 'w') as f:
+            img.save(f, 'JPEG')
+
 
     def numTiles(self, zoom):
         """
@@ -297,6 +429,8 @@ class Panorama:
         Gets raw metadata of the panorama.
         :return: dictionary - data from returned JSON
         """
+        if not self.pano_id:
+            return None
 
         url = 'https://cbks1.google.com/cbk'
         query = {
@@ -305,12 +439,15 @@ class Panorama:
             'cb_client':    'apiv3',
             'hl':           'en-US',
             'oe':           'utf-8',
-            'dmz':          1,              # depth map uncompressed
-            'pmz':          1,              # pano map  uncompressed
+            'dmz':          0,              # depth map uncompressed
+            'pmz':          0,              # pano map  uncompressed
             'dm':           1,              # depth map
-            'pm':           1,              # pano map
+            'pm':           0,              # pano map
             'panoid':       self.pano_id    # panoID hash
         }
+
+        #TODO: process uncompressed depth. Is it the same as compressed?
+        #TODO: what is pano map and how to use it?
 
         msg = self.requestData(url, query, headers)
         if not msg:
@@ -332,6 +469,9 @@ class Panorama:
         listening to the network trafic.
         :return: nested list from JSON
         """
+        if not self.pano_id:
+            return None
+
         url = 'https://www.google.fr/maps/photometa/v1'
         query = {
             'authuser': 0,
@@ -347,7 +487,7 @@ class Panorama:
             return None
 
         # Handle a content of the .js file retrieved form the server
-        # Here again - reverse engineerd. The js file contains
+        # Here again - reverse engineered. The js file contains
         # nested arrays with some useful info. String is
         # modified such that it can be loaded as JOSN.
 
@@ -459,15 +599,25 @@ class Panorama:
         print '_______________________________________'
 
     def __str__(self):
-        s = ''
-        s+= 'panoID %s\n' % self.pano_id
-        s+= 'neoghbours:\n'
+        if not self.isValid():
+            return 'Panorama not found'
+
+        g = self.getGPS()
+        d = self.getDate()
+        s = '\n'
+        s+= 'latlng: %f, %f\n' % (g[0], g[1])
+        s+= 'pano id: %s\n' % self.pano_id
+        s+= 'date: %s, %s\n' % (d[0], d[1])
+        s+= '\nSaptial neighbours [id]:\n'
+        s+= '------------------------\n'
 
         nbhs = self.getSpatialNeighbours()
         if nbhs:
             for x in nbhs:
                 s += x.__str__() + '\n'
 
+        s+= '\nTemporal neighbours [id, year, month]:\n'
+        s+= '--------------------------------------\n'
         nbhs = self.getTemporalNeighbours()
         if nbhs:
             for x,t in nbhs:
@@ -477,6 +627,9 @@ class Panorama:
 
 if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
-    p = Panorama(pid)
+    ll0 = (48, 23)
+    p = Panorama(latlng=ll0)
+    p.getDepthData()
+    p.getDepthImg()
     p.getImage(0)
     pass
