@@ -3,7 +3,7 @@
 `streetget` is a small python package for StreetView image downloading. It allows to you to crawl and download the StreetView panoramas along with its metadata and **depth maps**. It also allows you to download the StreetView **time-machine**, historical panoramas.
 
 ### Quick start:
-**Example 1: ** _Prague_ is beautiful city! Download panoramas inside a rectangle of the with 1.5 _km_ and height 1 _km_ centered at 50.0833° N, 14.4167°E. Download panoramas of the zoom levels 0, 3 and 5, store metadata, depth-map data and the depth-map thumbnails. Download also historical panoramas, save the results to `/local/myData` and name the dataset `Prague_all`.
+**Example 1:** _Prague_ is beautiful city! Download panoramas inside a rectangle of the with 1.5 _km_ and height 1 _km_ centered at 50.0833° N, 14.4167°E. Download panoramas of the zoom levels 0, 3 and 5, store metadata, depth-map data and the depth-map thumbnails. Download also historical panoramas, save the results to `/local/myData` and name the dataset `Prague_all`.
 
 `streetget box 50.0833°N, 14.4167°N 300 -itd -z 0,3,5 -D /local/myData  Prague_all`
 
@@ -47,7 +47,7 @@ Just clone the 'streetget' to any directory e.g. `/home/user/streetget/` and ins
 	 streetget gpsbox LAT LNG LAT_TL LNG_TL LAT_BR LNG_BR [options] LABEL
 	 streetget resume [-D DIR] LABEL
 	 streetget info ( (LAT LNG) | PID)
- streetget show PID
+     streetget show PID
 
 
 
