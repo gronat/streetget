@@ -627,8 +627,8 @@ class Panorama:
 
 if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
-    ll0 = (48, 23)
-    p = Panorama(latlng=ll0)
+    ll0 = (50, 14.41)
+    p = Panorama(pid)
     p.getDepthData()
     p.getDepthImg()
     p.getImage(0)

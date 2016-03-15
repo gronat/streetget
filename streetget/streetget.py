@@ -149,7 +149,7 @@ def launch(a, pvalid):
                 )
     c.run()
 
-if __name__ == '__main__':
+def main():
     s = sys.argv
 
     args = docopt(__doc__, version='0.0.1')
@@ -192,4 +192,5 @@ if __name__ == '__main__':
 
     parse(a)
 
-
+if __name__ == '__main__':
+    main()

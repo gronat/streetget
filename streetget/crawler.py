@@ -4,14 +4,14 @@ import logging
 import validator
 import shutil
 from panorama import Panorama
-from database2 import Database
+from database import Database
 import time
 
 loger = logging.getLogger('crawler')
 loger.setLevel(logging.DEBUG)
 
 class Crawler:
-    t_save  = 300                # backup db every 5min
+    t_save  = 600                # backup db every 10min
     n_thr   = 4                  # No. of crawling threads
 
     def __init__(self,
