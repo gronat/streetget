@@ -11,6 +11,10 @@ class Dbdata:
     s = set()
     active = 0
 
+'''
+When sentinel is found in the queue
+it terminates worker thread.
+'''
 class Sentinel:
     pass
 
@@ -32,7 +36,7 @@ class Database:
             self.q.not_empty.release()
 
     def isSentinel(self, key):
-        # 'isinstance' must be used, avoid '=='
+        # 'isinstance' must be used, do not use '=='
         return isinstance(key, Sentinel)
 
     def enqueue(self, key):
@@ -77,7 +81,7 @@ class Database:
 
     def save(self, fname):
         if not self.active == 0:
-            raise ValueError('Data still being procesed while attempting to save database.')
+            raise ValueError('Data still being processed while attempting to save database.')
 
         dbdata = Dbdata()
         dbdata.d = self.d

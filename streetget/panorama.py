@@ -34,21 +34,22 @@ class Panorama:
     depthdata = None
     depthmap = None
 
-
-    def __init__(self, pano_id = None, latlng = None):
+    def __init__(self, pano_id=None, latlng=None, radius=15):
         if not pano_id and not latlng:
-            raise ValueError('pano_id or latlng mus be given')
+            return;
 
-        self.pano_id = pano_id if pano_id else self.getPanoID(latlng)
+        self.pano_id = pano_id if pano_id else self.getPanoID(latlng, radius)
         if not self.pano_id:
             return
         self.meta = self.getMeta()
         self.time_meta = self.getTimeMeta()
+        pass
 
-    def getPanoID(self, latlng):
+    def getPanoID(self, latlng, radius=15):
         """
         Searches the closest panorama given the latlng and retuns its panoID hash
-        :argument tuple - float latitude longitude
+        :param: lalng tuple - float latitude longitude
+        :param: radius - search radius in meters
         :returns string - pano_id hash
         """
         # Base URL and headers
@@ -61,6 +62,7 @@ class Panorama:
             'hl':           'en',
             'output':       'json',
             'll':           '%.6f,%.6f' % latlng,
+            'radius':       radius,
         }
 
         msg = self.requestData(url, query, headers)
@@ -74,7 +76,7 @@ class Panorama:
         return self.meta and len(self.meta) > 0
 
     def isCustom(self):
-        """ Is it custom google panorama? """
+        """ Is it custom or google panorama? """
         if not self.isValid():
             return False
         aux = re.match(r'.*Google.*', self.meta['Data']['copyright'])
@@ -115,7 +117,7 @@ class Panorama:
         """
         Extracts temporal panorama links from
         timemachine metadata.
-        :return: list of tuples (pano_id, 'year, month')
+        :return: list of tuples (pano_id, (year, month))
         """
         #TODO: tt = (None, None)... return tt, following the same pattern
         # as e.g. getGPS
@@ -125,7 +127,7 @@ class Panorama:
             # Get timestamps of available time machine panoramas
             tstamps = []
             for x in aux[8]:
-                tstamps.append('%d, %d' % tuple(x[1]))  # year, month
+                tstamps.append(tuple(x[1]))  # year, month
 
             # Get corresponding panoID hashes
             pano_ids = [''] * len(tstamps)              # empty string list alloc
@@ -628,7 +630,9 @@ class Panorama:
 if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     ll0 = (50, 14.41)
-    p = Panorama(pid)
+    ll0 = (49.503569,13.544345)
+    #p = Panorama()
+    p = Panorama(latlng=ll0);
     p.getDepthData()
     p.getDepthImg()
     p.getImage(0)
