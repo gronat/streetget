@@ -273,11 +273,12 @@ class Panorama:
         try:
             file = BytesIO(msg)
             #file = StringIO(msg)
+            img = Image.open(file)
         except:
             print 'Problem reading tile for panorama'
             print self.pano_id
             return None
-        img = Image.open(file)
+        
         return img
 
     def getDepthData(self):
