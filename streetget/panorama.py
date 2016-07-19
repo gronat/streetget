@@ -247,7 +247,16 @@ class Panorama:
         grid = [xy for xy in product(range(tw), range(th))]
 
         for x,y in grid:
-            pano.paste(tiles[y+th*x], (512*x, 512*y))
+            try:
+                pano.paste(tiles[y+th*x], (512*x, 512*y))
+            except Exception as e:
+                msg = 'Error in stitching tiles, panorama:\n%s %s %s' % (
+                    self.pano_id, self.getGPS().__str__(), self.getDate().__str__()
+                )
+                loger.error(msg)
+                print msg
+                print 'Check this panorama at http://maps.google.com'
+                return None
 
         box = self.cropSize(zoom)
         return pano.crop(box)
@@ -275,10 +284,8 @@ class Panorama:
             #file = StringIO(msg)
             img = Image.open(file)
         except:
-            print 'Problem reading tile for panorama'
-            print self.pano_id
             return None
-        
+
         return img
 
     def getDepthData(self):
@@ -549,8 +556,13 @@ class Panorama:
         :param zoom: int [0-5] - zoom-level
         """
         img = self.getImage(zoom, n_threads)
-        if img:
+        try:
             img.save(fname, 'JPEG')
+        except Exception as e:
+            msg = 'Panorama image corrupted, panorama:\n%s %s %s' % (
+                self.pano_id, self.getGPS().__str__(), self.getDate().__str__()
+            )
+            loger.error(msg)
 
     def requestData(self, url, query, headers=None):
         """
@@ -647,9 +659,8 @@ if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     ll0 = (50, 14.41)
     #ll0 = (49.503569,13.544345)
-    #p = Panorama()
-    pid = '9ztN81CQ3lLVB_aGEB_DKw'
-
+    #p = Panorama
+    pid = 'KzDzUS3ub-yrzbOLNomavw'
     p = Panorama(pano_id=pid)
     p.getDepthData()
     p.getDepthImg()
