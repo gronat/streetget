@@ -1,5 +1,6 @@
 from Queue import Queue
 from io import BytesIO
+from io import StringIO
 from itertools import product
 from urllib import urlencode
 from struct import Struct
@@ -203,6 +204,10 @@ class Panorama:
         if self.isCustom():
             raise NotImplementedError('Custom panorama is not implemented')
 
+        if not self.hasZoom(zoom):
+            print 'Panorama %s has no zoom level %d' % (self.pano_id, zoom)
+            return None
+
         tw, th = self.numTiles(zoom)
         tiles = tw*th*[None]
 
@@ -265,10 +270,16 @@ class Panorama:
                 }
 
         msg = self.requestData(url,query, headers=headers)
-        file = BytesIO(msg)
+        try:
+            file = BytesIO(msg)
+            #file = StringIO(msg)
+        except:
+            print 'Problem reading tile for panorama'
+            print self.pano_id
+            return None
         img = Image.open(file)
         return img
-    
+
     def getDepthData(self):
         encoded = self.meta['model']['depth_map']
         # Decode
@@ -537,7 +548,8 @@ class Panorama:
         :param zoom: int [0-5] - zoom-level
         """
         img = self.getImage(zoom, n_threads)
-        img.save(fname, 'JPEG')
+        if img:
+            img.save(fname, 'JPEG')
 
     def requestData(self, url, query, headers=None):
         """
@@ -633,9 +645,11 @@ class Panorama:
 if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     ll0 = (50, 14.41)
-    ll0 = (49.503569,13.544345)
+    #ll0 = (49.503569,13.544345)
     #p = Panorama()
-    p = Panorama(latlng=ll0);
+    pid = '9ztN81CQ3lLVB_aGEB_DKw'
+
+    p = Panorama(pano_id=pid)
     p.getDepthData()
     p.getDepthImg()
     p.getImage(0)
