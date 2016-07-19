@@ -3,7 +3,7 @@
 Usage:
     streetget circle ( (LAT LNG) | PID) R [-tid -D DIR -z ZOOM] LABEL
     streetget box ( (LAT LNG) | PID) W H [-tid -D DIR -z ZOOM] LABEL
-    streetget gpsbox LAT LNG LAT_TL LNG_TL LAT_BR LNG_BR [options] LABEL
+    streetget gpsbox LAT LNG LAT_TL LNG_TL LAT_BR LNG_BR [-tid -D DIR -z ZOOM] LABEL
     streetget resume [-D DIR] LABEL
     streetget info ( (LAT LNG) | PID)
     streetget show PID

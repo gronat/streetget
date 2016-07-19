@@ -157,6 +157,9 @@ class Panorama:
         return ll
 
     def getDate(self):
+        """
+        :return: tuple of two integers (year, month)
+        """
         dd = (None, None)
         try:
             dates = self.meta['Data']['image_date']
