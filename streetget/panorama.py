@@ -578,7 +578,7 @@ class Panorama:
         u = None
         # Handle loose internet connection via loop
         err = None
-        for _ in range(10):
+        for _ in range(5):
             try:
                 u = requests.get(url + "?" + query_str, headers=headers)
             except Exception as e:
@@ -588,8 +588,10 @@ class Panorama:
             if u:
                 break
         else:
-            loger.error('%s %s:%s' % (self.pano_id,type(err).__name__, str(err)))
-            print 'Panorama loading error'
+            msg1 = '%s %s:%s ' % (self.pano_id,type(err).__name__, str(err))
+            msg2 = 'Panorama loading error, request:\n%s' % (url + "?" +query_str,)
+            loger.error(msg1 + msg2)
+            print msg2
             return None
 
         msg = u.content
