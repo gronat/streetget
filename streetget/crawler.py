@@ -11,7 +11,7 @@ loger = logging.getLogger('crawler')
 loger.setLevel(logging.DEBUG)
 
 class Crawler:
-    t_save  = 600                # backup db every 10min
+    t_save  = 60                 # backup db every 10min
     n_thr   = 4                  # No. of crawling threads
 
     def __init__(self,
@@ -70,7 +70,7 @@ class Crawler:
         return False
     
     def backup(self):
-        loger.debug('Backup')
+        loger.debug('Bacingk up')
         self.stopThreads()
         try:
             self.save(self.fname)
@@ -151,6 +151,7 @@ class Crawler:
         loger.debug('Threads started')
 
     def stopThreads(self):
+        loger.debug('Stopping threads...')
         for _ in self.threads:
             self.db.prependSentinel()   # sentinel exits thread
 
