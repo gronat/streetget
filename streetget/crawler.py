@@ -11,7 +11,7 @@ loger = logging.getLogger('crawler')
 loger.setLevel(logging.DEBUG)
 
 class Crawler:
-    t_save  = 60                 # backup db every 10min
+    t_save  = 300                # backup db every 5min
     n_thr   = 4                  # No. of crawling threads
 
     def __init__(self,
