@@ -377,10 +377,10 @@ class Panorama:
         data[1] - tuple w x h plane labels
         data[2] - tuple of the length of # planes
                   item: ((n_0, n_1, n_2), d) where n_i is
-                  a component of planes normal vector and d
-                  is its distance from camera center.
+                  a component of a plane normal vector and d
+                  is its distance from the camera center.
 
-        Google depth map is prepresented as a set of 3D planes.
+        Google depth map is represented as a set of 3D planes.
         Hence data[0], data[1] represent a 2D matrix which
         corresponds to a spherical panorama. Each item of the
         matrix is a label of a plane. data[2] represents
@@ -546,7 +546,7 @@ class Panorama:
         :param fname: string - filename
         """
         with open(fname, 'w') as f:
-            json.dump(self.meta, f)
+            json.dump(self.time_meta, f)
 
     def saveImage(self, fname, zoom=5, n_threads=16):
         """
@@ -602,7 +602,10 @@ class Panorama:
         maxy = 0
         for x,y in product(range(30), range(20)):
             img = self.getTile(x,y,zoom)
-            h = img.histogram()
+            try:
+                h = img.histogram()
+            except:
+                print ''
             if not sum(h[1:]) == 0:
                 maxx = x if x>maxx else maxx
                 maxy = y if y>maxy else maxy
@@ -660,6 +663,8 @@ class Panorama:
 if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     ll0 = (50, 14.41)
+    p = Panorama(latlng=ll0)
+    p.getTemporalNeighbours()
     #ll0 = (49.503569,13.544345)
     #p = Panorama
     pid = 'KzDzUS3ub-yrzbOLNomavw'
