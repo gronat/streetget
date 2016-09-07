@@ -44,7 +44,6 @@ class Panorama:
             return
         self.meta = self.getMeta()
         self.time_meta = self.getTimeMeta()
-        pass
 
     def getPanoID(self, latlng, radius=15):
         """
@@ -74,7 +73,7 @@ class Panorama:
 
     def isValid(self):
         """ Panorama without metadata is not valid """
-        return self.meta and len(self.meta) > 0
+        return self.meta is not None and len(self.meta) > 0
 
     def isCustom(self):
         """ Is it custom or google panorama? """
@@ -105,6 +104,7 @@ class Panorama:
             for x in self.meta['Links']:
                 pano_ids.append(x['panoId'])
         except Exception as e:
+            print ''
             w = '%s \t %.6f %.6f \t spatial neighbours not found,\n' \
                 '%s: %s' % (
                 self.pano_id, self.getGPS()[0], self.getGPS()[1],
@@ -661,6 +661,8 @@ class Panorama:
         return s
 
 if __name__ == '__main__':
+    p = Panorama('FrQesIkFh6SlrZkNxgVbpQ')
+    p.getSpatialNeighbours()
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     ll0 = (50, 14.41)
     p = Panorama(latlng=ll0)
