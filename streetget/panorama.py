@@ -214,16 +214,29 @@ class Panorama:
         n_threads = min(n_threads, tw*th)
 
         sentinel = object()
+        global terminate
+        terminate = False
         def worker(q):
+            global terminate
             while True:
                 item = q.get()
                 if item is sentinel:
                     q.task_done()
                     break
-                x,y = item
-                tiles[y+th*x] = self.getTile(x, y, zoom)
-                q.task_done()
+                # Recieve terminate signal
+                if terminate:
+                    q.task_done()
+                    continue
 
+                # Get tile
+                x,y = item
+                tile = self.getTile(x, y, zoom)
+                # Send terminate signal if error
+                if tile is None:
+                    terminate = True
+                # Save tile
+                tiles[y + th * x] = tile
+                q.task_done()
 
         # Starting threads
         q = Queue()
@@ -239,7 +252,6 @@ class Panorama:
         # Queueing sentinels to exit the threads
         for _ in range(n_threads):
             q.put(sentinel)
-
         q.join()            # all jobs finished
 
         # Stitching tiles together
@@ -578,6 +590,7 @@ class Panorama:
         u = None
         # Handle loose internet connection via loop
         err = None
+        # Repeat HTTP request if it fails
         for _ in range(5):
             try:
                 u = requests.get(url + "?" + query_str, headers=headers)
@@ -661,17 +674,20 @@ class Panorama:
         return s
 
 if __name__ == '__main__':
-    p = Panorama('FrQesIkFh6SlrZkNxgVbpQ')
-    p.getSpatialNeighbours()
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
-    ll0 = (50, 14.41)
-    p = Panorama(latlng=ll0)
-    p.getTemporalNeighbours()
-    #ll0 = (49.503569,13.544345)
-    #p = Panorama
-    pid = 'KzDzUS3ub-yrzbOLNomavw'
-    p = Panorama(pano_id=pid)
-    p.getDepthData()
-    p.getDepthImg()
-    p.getImage(0)
+    pid = 'UP64cyOZX-nnzPSJx10gEg' # Aki, stitching error
+    p = Panorama(pid)
+    img = p.getImage()
     pass
+    # ll0 = (50, 14.41)
+    # p = Panorama(latlng=ll0)
+    # p.getDepthData()
+    # p.getTemporalNeighbours()
+    # #ll0 = (49.503569,13.544345)
+    # #p = Panorama
+    # pid = 'KzDzUS3ub-yrzbOLNomavw'
+    # p = Panorama(pano_id=pid)
+    # p.getDepthData()
+    # p.getDepthImg()
+    # p.getImage(0)
+    # pass
