@@ -152,7 +152,7 @@ def launch(a, pvalid):
 def main():
     s = sys.argv
 
-    args = docopt(__doc__, version='0.0.1')
+    args = docopt(__doc__, version='0.1.0')
     a = Arguments()
 
     # CLI command
