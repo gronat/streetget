@@ -223,7 +223,7 @@ class Backuper:
     def check(self):
         t = time.time()
         if (t-self.tl) > self.period:
-            print 'Calling backing up function'
+            print 'Calling back up function...'
             self.backupFnc()
             print 'Backed up!'
             self.tl = time.time()
