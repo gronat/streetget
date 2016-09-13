@@ -123,16 +123,7 @@ class Panorama:
         # as e.g. getGPS
         try:
             aux = self.time_meta[1][0][5][1]  # interesting part of the meta list
-
-            # Get timestamps of available time machine panoramas
-            tstamps = []
-            for x in aux[8]:
-                tstamps.append(tuple(x[1]))  # year, month
-
-            # Get corresponding panoID hashes
-            pano_ids = [''] * len(tstamps)              # empty string list alloc
-            for j in range(1, len(tstamps) + 1):
-                pano_ids[-j] = aux[3][0][-j][0][1]      # pano_id hash string
+            tstamps, pano_ids = self._collectLinks(aux)
         except Exception as e:
             w = '%s \t %.6f %.6f\t temporal neighbours not found\n %s:%s' % (
                     self.pano_id, self.getGPS()[0], self.getGPS()[1],
@@ -142,6 +133,30 @@ class Panorama:
             return None
 
         return zip(pano_ids, tstamps)
+
+    def _collectLinks(self, aux):
+
+        # Get available panoID hashes
+        pano_ids=[]
+        for j in range(0, len(aux[3][0])):
+            pano_ids.append(aux[3][0][-j-1][0][1])  # pano_id hash string
+
+        # Get timestamps of available time machine panoramas
+        # Timestamsps are not always available
+        tstamps = []
+        if aux[8] is not None:
+            for x in aux[8]:
+                tstamps.append(tuple(x[1]))  # year, month
+
+        len_ids = len(pano_ids)
+        len_tst = len(tstamps)
+        if len_tst > 0:
+            pano_ids[(len_ids-len_tst):]
+        else:
+            tstamps = len_ids*[(None, None)]
+
+        return tstamps, pano_ids
+
 
     def getGPS(self):
         ll = (None, None)
@@ -675,9 +690,10 @@ class Panorama:
 if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     pid = 'UP64cyOZX-nnzPSJx10gEg' # Aki, stitching error
+    pid = 'SxOmGwcXGt9IFQxfhFbMdg' # no temporal neighbours, but can see it on web streetview
     p = Panorama(pid)
-    img = p.getImage()
-    pass
+    p.getTemporalNeighbours()
+    print ''
     # ll0 = (50, 14.41)
     # p = Panorama(latlng=ll0)
     # p.getDepthData()
