@@ -144,7 +144,7 @@ class Panorama:
         # Get timestamps of available time machine panoramas
         # Timestamsps are not always available
         tstamps = []
-        if aux[8] is not None:
+        if len(aux) > 9 and aux[8] is not None:
             for x in aux[8]:
                 tstamps.append(tuple(x[1]))  # year, month
 
@@ -691,6 +691,7 @@ if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     pid = 'UP64cyOZX-nnzPSJx10gEg' # Aki, stitching error
     pid = 'SxOmGwcXGt9IFQxfhFbMdg' # no temporal neighbours, but can see it on web streetview
+    pid = 'QsgZVIrMVYQAAAQIt4hsCQ'
     p = Panorama(pid)
     p.getTemporalNeighbours()
     print ''
