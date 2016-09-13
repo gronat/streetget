@@ -56,9 +56,10 @@ class Crawler:
             self.db.save(fname)
             loger.info('db saved to ' + fname)
         except Exception as e:
-            msg = 'Database save failed! Active threads still accessing the database'
-            loger.error(msg)
-            raise e
+            msg1 = 'Non-zero active thread chcksum while saving.\n'
+            msg2 = '%s: %s\ndb.active = %d' % (type(e).__name__, str(e), db.active())
+            loger.warining(msg1 + msg2)
+            print 'Warning: %s' % (msg1,)
 
     def load(self, fname):
         try:
@@ -132,21 +133,23 @@ class Crawler:
             p.saveDepthData(pbase+'_depth.json')
             p.saveDepthImage(pbase+'_zoom_0_depth.jpg', dzoom)
 
-    def worker(self):
+    def worker(self, id):
+        loger.debug('Starting thread %d' % (id,))
         while not self.exit_flag:
             pano_id = self.db.dequeue()
             if self.db.isSentinel(pano_id):
                 self.db.task_done()
-                return
+                break
             p = Panorama(pano_id)
             self.savePano(p, self.zoom)
             self.visitPano(p)
             self.db.task_done()
+        loger.debug('Exiting thread %d' % (id,))
 
     def startThreads(self):
         self.exit_flag = False
         for j in range(self.n_thr):
-            self.threads[j] = threading.Thread(target=self.worker)
+            self.threads[j] = threading.Thread(target=self.worker, args=(j,))
             self.threads[j].start()
         loger.debug('Threads started')
 

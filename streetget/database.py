@@ -80,8 +80,6 @@ class Database:
         return self.active
 
     def save(self, fname):
-        if not self.active == 0:
-            raise ValueError('Data still being processed while attempting to save database.')
 
         dbdata = Dbdata()
         dbdata.d = self.d
@@ -91,6 +89,9 @@ class Database:
 
         with open(fname, 'w') as f:
             pickle.dump(dbdata, f)
+
+        if not self.active == 0:
+            raise ValueError('Non-zero active thread counter.')
 
     def load(self, fname):
         with open(fname) as f:
