@@ -208,7 +208,7 @@ class Monitor:
         avg = (n - self.n0)/(t - self.t0)*60
         v = (n - self.nl)/(t - self.tl)*60
 
-        print 'DB size: %06d\t Q size: %05d\t %05d/min\t avg %05d/min' % \
+        print 'Downloaded: %06d\t Queue: %05d\t %05d/min\t avg %05d/min' % \
               (n, self.db.qsize(), v, avg)
 
         self.tl = t
@@ -223,6 +223,7 @@ class Backuper:
     def check(self):
         t = time.time()
         if (t-self.tl) > self.period:
+            print 'Calling backing up function'
             self.backupFnc()
             print 'Backed up!'
             self.tl = time.time()
