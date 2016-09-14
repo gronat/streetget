@@ -315,6 +315,14 @@ class Panorama:
         return img
 
     def getDepthData(self):
+        if 'model' not in self.meta.keys() or \
+           'depth_map' not in self.meta['model'].keys():
+            msg = 'Panorama has no depth in meta.\n%s' % (self.pano_id)
+            loger.warning(msg)
+            print msg
+            self.depthdata = -1
+            return self.depthdata
+
         encoded = self.meta['model']['depth_map']
         # Decode
         encoded += '=' * (len(encoded) % 4)
@@ -353,6 +361,12 @@ class Panorama:
         :param zoom: int [0-5], default None
         :return img - PIL Image object
         """
+        if not self.depthdata:
+            self.getDepthData()
+
+        if self.depthdata == -1:
+            return None
+
         size, lbls, planes = self.depthdata
         w, h = size
         pi = np.pi
@@ -417,6 +431,11 @@ class Panorama:
         if not self.depthdata:
             self.getDepthData()
 
+        if self.depthdata == -1:
+            msg = 'No depth data saved for panorama (data unavailable):\n%s' % (self.pano_id,)
+            loger.warning(msg)
+            return
+
         with open(fname, 'w') as f:
             json.dump(self.depthdata, f)
 
@@ -432,6 +451,11 @@ class Panorama:
         """
         if not self.depthdata:
             self.getDepthData()
+
+        if self.depthdata == -1:
+            msg = 'No depth image saved for panorama (data unavailable):\n%s' % (self.pano_id,)
+            loger.warning(msg)
+            return
 
         img = self.getDepthImg(zoom)
         with open(fname, 'w') as f:

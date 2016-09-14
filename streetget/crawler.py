@@ -57,7 +57,7 @@ class Crawler:
             loger.info('db saved to ' + fname)
         except Exception as e:
             msg1 = 'Non-zero active thread chcksum while saving.\n'
-            msg2 = '%s: %s\ndb.active = %d' % (type(e).__name__, str(e), db.active())
+            msg2 = '%s: %s\ndb.active = %d' % (type(e).__name__, str(e), self.db.active())
             loger.warining(msg1 + msg2)
             print 'Warning: %s' % (msg1,)
 
@@ -66,7 +66,7 @@ class Crawler:
             self.db.load(fname)
             return True
         except Exception as e:
-            msg = 'db loadin failed! %s:%s' % (type(e).__name__, str(e))
+            msg = 'db loading failed! %s:%s' % (type(e).__name__, str(e))
             loger.error(msg)
         return False
     
