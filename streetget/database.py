@@ -35,9 +35,24 @@ class Database:
         finally:
             self.q.not_empty.release()
 
+    def cleanSentinels(self):
+        self.q.not_full.acquire()
+        try:
+            while(len(self.q.queue) > 0 and self.isSentinel(self.q.queue[0])):
+                # dead lock
+                self.q.queue.popleft()
+                self.q.unfinished_tasks -= 1
+            self.q.not_full.notify()
+        finally:
+            self.q.not_full.release()
+
     def isSentinel(self, key):
         # 'isinstance' must be used, do not use '=='
-        return isinstance(key, Sentinel)
+        if  isinstance(key, Sentinel) or \
+            str(key.__class__) == 'streetget.database.Sentinel':
+            return True
+
+        return False
 
     def enqueue(self, key):
         if key not in self.s:
@@ -103,3 +118,37 @@ class Database:
         self.q = Queue.Queue()
         for item in dbdata.qvec:
             self.q.put(item)
+
+def test1():
+    db = Database()
+    for k in range(4):
+        db.prependSentinel()
+    db.cleanSentinels()
+
+    if db.qsize() != 0:
+        print 'FAILED'
+    else:
+        print 'PASSED'
+
+def test2():
+    fname = '/home/petr/work/python/shibuya/01/debug_db.pickle'
+    db = Database()
+    db.prependSentinel()
+    db.save('foo.pickle')
+    db.load(fname)
+    db.cleanSentinels()
+    if db.isSentinel(db.q.queue[0]):
+        print 'FAILED'
+    else:
+        print 'PASSED'
+
+if __name__ == '__main__':
+
+    test1()
+    test2()
+
+    fname = '/home/petr/work/python/shibuya/01/debug_db.pickle'
+
+    db = Database()
+    db.load(fname)
+    db.qsize()

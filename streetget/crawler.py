@@ -147,6 +147,7 @@ class Crawler:
         loger.debug('Exiting thread %d' % (id,))
 
     def startThreads(self):
+        self.db.cleanSentinels()
         self.exit_flag = False
         for j in range(self.n_thr):
             self.threads[j] = threading.Thread(target=self.worker, args=(j,))
