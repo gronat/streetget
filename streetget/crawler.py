@@ -140,10 +140,15 @@ class Crawler:
             if self.db.isSentinel(pano_id):
                 self.db.task_done()
                 break
-            p = Panorama(pano_id)
-            self.savePano(p, self.zoom)
-            self.visitPano(p)
-            self.db.task_done()
+            try:
+                p = Panorama(pano_id)
+                self.savePano(p, self.zoom)
+                self.visitPano(p)
+            except Exception as e:
+                msg = 'Thread %d - %s:%s' % (id, type(e).__name__, str(e))
+                loger.error(msg)
+            finally:
+                self.db.task_done()
         loger.debug('Exiting thread %d' % (id,))
 
     def startThreads(self):
