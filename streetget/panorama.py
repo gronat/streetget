@@ -1,4 +1,4 @@
-from Queue import Queue
+from queue import Queue
 from io import BytesIO
 from io import StringIO
 from itertools import product
@@ -629,13 +629,19 @@ class Panorama:
         # Handle loose internet connection via loop
         err = None
         # Repeat HTTP request if it fails
-        for _ in range(5):
+        max_trials = 5
+        for j in range(1, max_trials+1):
             try:
                 u = requests.get(url + "?" + query_str, headers=headers)
             except Exception as e:
                 print type(e).__name__ + str(e)
                 print 'URL request retry...'
                 err = e
+                if j == max_trials:
+                    msg = 'Max trials reached, panorama %s - %s: %s' % (
+                        self.pano_id, type(e).__name__, str(e)
+                    )
+                    loger.warning(msg)
             if u:
                 break
         else:

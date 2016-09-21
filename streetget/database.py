@@ -1,4 +1,4 @@
-import Queue
+import queue
 import pickle
 import logging
 
@@ -21,7 +21,7 @@ class Sentinel:
 
 class Database:
     def __init__(self):
-        self.q = Queue.Queue()
+        self.q = queue.Queue()
         self.d = dict()
         self.s = set()
         self.active = 0
@@ -115,7 +115,7 @@ class Database:
         self.d = dbdata.d
         self.s = dbdata.s
         self.active = dbdata.active
-        self.q = Queue.Queue()
+        self.q = queue.Queue()
         for item in dbdata.qvec:
             self.q.put(item)
 
