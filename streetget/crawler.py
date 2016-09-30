@@ -140,7 +140,7 @@ class Crawler:
             fname = pbase+'_depth.json'
             if not (os.path.exists(fname) and self.skip):
                 p.saveDepthData(fname)
-                
+
             fname = pbase+'_zoom_0_depth.jpg'
             if not (os.path.exists(fname) and self.skip):
                 p.saveDepthImage(fname, dzoom)
@@ -150,7 +150,7 @@ class Crawler:
         while not self.exit_flag:
             loger.debug('Tread %d dequeue'%(id,))
             pano_id = self.db.dequeue()
-            loger.debug('Tread %d dequeue DONE'%(id,))
+            loger.debug('Tread %d dequeued, id: %s'%(id, pano_id))
             if self.db.isSentinel(pano_id):
                 self.db.task_done()
                 break
@@ -163,6 +163,7 @@ class Crawler:
                 loger.error(msg)
             finally:
                 self.db.task_done()
+
         loger.debug('Exiting thread %d' % (id,))
 
     def startThreads(self):
