@@ -17,7 +17,7 @@ class Crawler:
     def __init__(self,
                     latlng=None, pano_id=None, validator=None,
                     root='myData', label='myCity', zoom=5,
-                    images=False, depth=False, time=True
+                    images=False, depth=False, time=True, skip=False
                  ):
         if not latlng and not pano_id:
             raise ValueError('start point (latlng or pano_id) not given')
@@ -121,22 +121,36 @@ class Crawler:
         if not os.path.exists(pdir):
             os.makedirs(pdir)
 
-        p.saveMeta(pbase + '_meta.json')
-        p.saveTimeMeta(pbase + '_time_meta.json')
+        fname = pbase + '_meta.json'
+        if not (os.path.exists(fname) and self.skip):
+            p.saveMeta(fname)
+
+        fname = pbase + '_time_meta.json'
+        if not (os.path.exists(fname) and self.skip):
+            p.saveTimeMeta(fname)
 
         if self.images:
             for z in zoom:
                 if p.hasZoom(z):
-                    p.saveImage(pbase + '_zoom_' + str(z) + '.jpg', z, n_threads)
+                    fname = pbase + '_zoom_' + str(z) + '.jpg'
+                    if not (os.path.exists(fname) and self.skip):
+                        p.saveImage(fname, z, n_threads)
         dzoom = 0
         if self.depth:
-            p.saveDepthData(pbase+'_depth.json')
-            p.saveDepthImage(pbase+'_zoom_0_depth.jpg', dzoom)
+            fname = pbase+'_depth.json'
+            if not (os.path.exists(fname) and self.skip):
+                p.saveDepthData(fname)
+                
+            fname = pbase+'_zoom_0_depth.jpg'
+            if not (os.path.exists(fname) and self.skip):
+                p.saveDepthImage(fname, dzoom)
 
     def worker(self, id):
         loger.debug('Starting thread %d' % (id,))
         while not self.exit_flag:
+            loger.debug('Tread %d dequeue'%(id,))
             pano_id = self.db.dequeue()
+            loger.debug('Tread %d dequeue DONE'%(id,))
             if self.db.isSentinel(pano_id):
                 self.db.task_done()
                 break

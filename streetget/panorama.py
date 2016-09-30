@@ -717,12 +717,22 @@ class Panorama:
 
         return s
 
+def str_bistr(data):
+    buf = []
+    for c in data:
+        aux = format(ord(c), '08b')
+        buf.append(aux[4:])
+        buf.append(aux[:4])
+    return buf
+
 if __name__ == '__main__':
     pid = 'flIERJS9Lk4AAAQJKfjPkQ'
     pid = 'UP64cyOZX-nnzPSJx10gEg' # Aki, stitching error
     pid = 'SxOmGwcXGt9IFQxfhFbMdg' # no temporal neighbours, but can see it on web streetview
     pid = 'QsgZVIrMVYQAAAQIt4hsCQ'
     p = Panorama(pid)
+    p.getImage()
+    p.getDepthData()
     p.getTemporalNeighbours()
     print ''
     # ll0 = (50, 14.41)
