@@ -148,9 +148,9 @@ class Crawler:
     def worker(self, id):
         loger.debug('Starting thread %d' % (id,))
         while not self.exit_flag:
-            loger.debug('Tread %d dequeue'%(id,))
+            #loger.debug('Tread %d dequeue'%(id,))
             pano_id = self.db.dequeue()
-            loger.debug('Tread %d dequeued, id: %s'%(id, pano_id))
+            loger.debug('Tread %d dequeued, id: %s' % (id, pano_id))
             if self.db.isSentinel(pano_id):
                 self.db.task_done()
                 break

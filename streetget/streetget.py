@@ -109,7 +109,8 @@ def parse(a):
     fdir = os.path.join(a.root, a.label)
     if not os.path.exists(fdir):
         os.makedirs(fdir)
-    l_fmt = '%(asctime)s %(levelname)s: %(message)s'        # format
+
+    l_fmt = '%(asctime)s %(levelname)s [%(filename)s:%(lineno)s - %(funcName)10s() ]: %(message)s'        # format
     l_dfmt = '%m/%d/%Y %I:%M:%S %p'                         # date format
     l_fname = os.path.join(a.root, a.label, 'crawler.log')  # filepath
     logging.basicConfig(filename=l_fname, format=l_fmt, datefmt=l_dfmt)

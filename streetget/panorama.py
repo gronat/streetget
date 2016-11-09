@@ -8,12 +8,14 @@ import threading
 import json
 import re
 import requests
-import sys
+import sys, os
 import logging
 import numpy as np
 from PIL import Image
 from numpy import array
-
+from street_exceptions import NoSpatialNeighbours, NoTemporalNeighbours
+from street_exceptions import NoCollectLinks, CustomPanoramaNotSupported
+from street_exceptions import GoogleUpdating
 import matplotlib as mpl
 mpl.use('Agg')                  # avoid Tk window
 import matplotlib.pyplot as plt
@@ -25,8 +27,18 @@ headers = {
     'User-agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:42.0) Gecko/20100101 Firefox/42.0'      # may be used later to fool server
 }
 
-loger = logging.getLogger('panorama')
-loger.setLevel(logging.WARNING)
+if __name__ == '__main__':
+    loger = logging.getLogger('panorama')
+    loger.setLevel(logging.DEBUG)
+
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    loger.addHandler(ch)
+else:
+    loger = logging.getLogger('panorama')
+    loger.setLevel(logging.WARNING)
 
 class Panorama:
     pano_id = None
@@ -44,6 +56,11 @@ class Panorama:
             return
         self.meta = self.getMeta()
         self.time_meta = self.getTimeMeta()
+    def _pano_msg(self):
+        '''
+        Serves for basic message in logger messages.
+        '''
+        return '%s %.6f %.6f\n' % (self.pano_id, self.getGPS()[0], self.getGPS()[1])
 
     def getPanoID(self, latlng, radius=15):
         """
@@ -101,16 +118,20 @@ class Panorama:
         """
         pano_ids = []
         try:
+            pano_ids = self._collectSpatialLinks()
+        except NoSpatialNeighbours:
+            loger.warn(self._pano_msg() + 'Spatial neighbours not found.')
+        except Exception:
+            loger.exception()
+        return pano_ids
+
+    def _collectSpatialLinks(self):
+        try:
+            pano_ids = []
             for x in self.meta['Links']:
                 pano_ids.append(x['panoId'])
-        except Exception as e:
-            w = '%s \t %.6f %.6f \t spatial neighbours not found,\n' \
-                '%s: %s' % (
-                self.pano_id, self.getGPS()[0], self.getGPS()[1],
-                type(e).__name__, str(e)
-            )
-            loger.warn(w)
-
+        except:
+            raise NoSpatialNeighbours
         return pano_ids
 
     def getTemporalNeighbours(self):
@@ -121,41 +142,61 @@ class Panorama:
         """
         #TODO: tt = (None, None)... return tt, following the same pattern
         # as e.g. getGPS
+        neighbours = None
+        try:
+            aux = self._extractTemporalLinks()
+            tstamps, pano_ids = self._collectTemporalLinks(aux)
+            neighbours = zip(pano_ids, tstamps)
+        except NoTemporalNeighbours:
+            loger.warning(self._pano_msg() + 'Temporal neighbours not found.')
+        except NoCollectLinks:
+            loger.warning(self._pano_msg() + 'Can not connect links from metadata.')
+        except Exception:
+            loger.exception(self._pano_msg())
+        return neighbours
+
+    def _extractTemporalLinks(self):
         try:
             aux = self.time_meta[1][0][5][1]  # interesting part of the meta list
-            tstamps, pano_ids = self._collectLinks(aux)
-        except Exception as e:
-            w = '%s \t %.6f %.6f\t temporal neighbours not found\n %s:%s' % (
-                    self.pano_id, self.getGPS()[0], self.getGPS()[1],
-                    type(e).__name__, str(e)
-                )
-            loger.warn(w)
-            return None
+            return aux
+        except:
+            raise NoTemporalNeighbours('Extracting links.')
 
-        return zip(pano_ids, tstamps)
 
-    def _collectLinks(self, aux):
+    def _collectTemporalLinks(self, aux):
+        try:
+            # Get available panoID hashes
+            # Sometimes the pano hash item is empty
+            pano_ids=[]
+            for j in range(0, len(aux[3][0])):
+                if len(aux[3][0][-j-1]) == 0:
+                    continue        # empty item
+                pano_ids.append(aux[3][0][-j-1][0][1])  # pano_id hash string
 
-        # Get available panoID hashes
-        pano_ids=[]
-        for j in range(0, len(aux[3][0])):
-            pano_ids.append(aux[3][0][-j-1][0][1])  # pano_id hash string
+            # Get timestamps of available time machine panoramas
+            # Timestamsps are not always available
+            tstamps = []
+            if len(aux) > 9 and aux[8] is not None:
+                for x in aux[8]:
+                    tstamps.append(tuple(x[1]))  # year, month
 
-        # Get timestamps of available time machine panoramas
-        # Timestamsps are not always available
-        tstamps = []
-        if len(aux) > 9 and aux[8] is not None:
-            for x in aux[8]:
-                tstamps.append(tuple(x[1]))  # year, month
+            # Consider only temporal links with the time stamps
+            len_ids = len(pano_ids)
+            len_tst = len(tstamps)
 
-        len_ids = len(pano_ids)
-        len_tst = len(tstamps)
-        if len_tst > 0:
-            pano_ids[(len_ids-len_tst):]
-        else:
-            tstamps = len_ids*[(None, None)]
+            if len_tst == 0 or len_ids == 0:
+                raise NoTemporalNeighbours('Processing temporal metadata.')
 
-        return tstamps, pano_ids
+            if len_tst > 0:
+                pano_ids = pano_ids[(len_ids-len_tst):]
+            else:
+                tstamps = len_ids*[(None, None)]
+
+            return tstamps, pano_ids
+        except NoTemporalNeighbours:
+            raise
+        except:
+            raise NoCollectLinks('Processing temporal metadata.')
 
 
     def getGPS(self):
@@ -181,11 +222,9 @@ class Panorama:
             ptrn = r'(\d+)-\s*(\d+)'
             m = re.match(ptrn, dates)
             dd = (int(m.groups()[0]), int(m.groups()[1]))
-        except Exception as e:
-            msg = '%s no date found - %s: %s' % (
-                self.pano_id, type(e).__name__, str(e)
-            )
-            loger.error(msg)
+        except Exception:
+            loger.error(self._pano_msg())
+            loger.exception()
         return dd
 
     def getAllNeighbours(self):
@@ -276,12 +315,9 @@ class Panorama:
             try:
                 pano.paste(tiles[y+th*x], (512*x, 512*y))
             except Exception as e:
-                msg = 'Error in stitching tiles, panorama:\n%s %s %s' % (
-                    self.pano_id, self.getGPS().__str__(), self.getDate().__str__()
-                )
+                msg = self._pano_msg() + 'Error in tile stitching.'
                 loger.error(msg)
-                print msg
-                print 'Check this panorama at http://maps.google.com'
+                print msg + '\nCheck this panorama at http://maps.google.com'
                 return None
 
         box = self.cropSize(zoom)
@@ -396,8 +432,7 @@ class Panorama:
         try:
             plt.imshow(self.depthmap)
         except Exception as e:
-            msg = type(e).__name__ + e.__str__()
-            loger.error(self.pano_id + ': ' + msg)
+            loger.error(self._pano_msg() + 'Can not export depth as an image.')
             return Image.new('RGB', (1,1))
 
         buf = BytesIO()
@@ -531,8 +566,7 @@ class Panorama:
         try:
             jsons = json.loads(msg)
         except Exception as e:
-            w = '%s has no meta JSON, received: %s' % (self.pano_id, msg)
-            loger.warn(w + str(e))
+            loger.warn(self._pano_msg() + 'No met JSON recieved.\n' + msg)
 
         return jsons
 
@@ -577,8 +611,7 @@ class Panorama:
             # Load the JSON nested list
             data = json.loads(msg);
         except Exception as e:
-            w = '%s has no time meta JSON, received: %s' % (self.pano_id, msg)
-            loger.warn(w + str(e))
+            loger.warn(self._pano_msg() + 'No temporal meta JSON recieved.\n' + msg)
 
         return data
 
@@ -609,10 +642,7 @@ class Panorama:
         try:
             img.save(fname, 'JPEG')
         except Exception as e:
-            msg = 'Panorama image corrupted, panorama:\n%s %s %s' % (
-                self.pano_id, self.getGPS().__str__(), self.getDate().__str__()
-            )
-            loger.error(msg)
+            loger.error(self._pano_msg() + 'Panorama image corrupted.')
 
     def requestData(self, url, query, headers=None):
         """
@@ -625,33 +655,29 @@ class Panorama:
         """
         # URL GET request
         query_str = urlencode(query).encode('ascii')
-        u = None
-        # Handle loose internet connection via loop
-        err = None
-        # Repeat HTTP request if it fails
-        max_trials = 5
-        for j in range(1, max_trials+1):
+        # Repeat HTTP request if failure (e.g. unstable internet connection)
+        response = None
+        trials = 5                  # max trials
+        while not response:
+            trials -= 1
             try:
-                u = requests.get(url + "?" + query_str, headers=headers)
-            except Exception as e:
-                print type(e).__name__ + str(e)
-                print 'URL request retry...'
-                err = e
-                if j == max_trials:
-                    msg = 'Max trials reached, panorama %s - %s: %s' % (
-                        self.pano_id, type(e).__name__, str(e)
-                    )
-                    loger.warning(msg)
-            if u:
-                break
-        else:
-            msg1 = '%s %s:%s ' % (self.pano_id,type(err).__name__, str(err))
-            msg2 = 'Panorama loading error, request:\n%s' % (url + "?" +query_str,)
-            loger.error(msg1 + msg2)
-            print msg2
-            return None
+                response = requests.get(url + "?" + query_str, headers=headers)
+                response.raise_for_status() # raises if 4xx or 5xx error code
+                if response.status_code == 101:
+                    raise GoogleUpdating
+            except GoogleUpdating:
+                loger.error('%sStatus code %d: This panorama is recently being updated. Please, try later.'\
+                                % (self._pano_msg(), 101)
+                            )
+                return None
+            except Exception:
+                if max_trials == 0:
+                    loger.warning(self._pano_msg() + 'Max trials of the URL request reached.\n' \
+                                  + response.url + '\nStatus code: ' + response.status_code)
+                    loger.exception()
+                    return None
 
-        msg = u.content
+        msg = response.content
         return msg
 
     def _utilGetNumTiles(self, zoom):
@@ -730,10 +756,15 @@ if __name__ == '__main__':
     pid = 'UP64cyOZX-nnzPSJx10gEg' # Aki, stitching error
     pid = 'SxOmGwcXGt9IFQxfhFbMdg' # no temporal neighbours, but can see it on web streetview
     pid = 'QsgZVIrMVYQAAAQIt4hsCQ'
-    p = Panorama(pid)
-    p.getImage()
-    p.getDepthData()
+    pid = 'WaYEbC0CoYLMJZXJrixo6w'
+    pid = 'dEVgj2uhGgcAAAQYPMlnig'
+    pid = 'T_flse8CPJRvIIFXhmt4xA'
+
+    p = Panorama(pid);
+    # p.getImage()
+    # p.getDepthData()
     p.getTemporalNeighbours()
+    print p
     print ''
     # ll0 = (50, 14.41)
     # p = Panorama(latlng=ll0)
