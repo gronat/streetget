@@ -4,7 +4,7 @@ packages = find_packages()
 
 setup(
     name='streetget',
-    version='0.2.5',
+    version='0.2.6',
     url='https://www.rocq.inria.fr/cluster-willow/gronat/streetget/',
     author='petr',
     author_email='',
