@@ -657,9 +657,11 @@ class Panorama:
         query_str = urlencode(query).encode('ascii')
         # Repeat HTTP request if failure (e.g. unstable internet connection)
         response = None
-        trials = 5                  # max trials
+
+        max_trials = 10
+        trials_remain = max_trials                  # max trials
         while not response:
-            trials -= 1
+            trials_remain -= 1
             try:
                 response = requests.get(url + "?" + query_str, headers=headers)
                 response.raise_for_status() # raises if 4xx or 5xx error code
@@ -671,7 +673,7 @@ class Panorama:
                             )
                 return None
             except Exception:
-                if max_trials == 0:
+                if trials_remain == 0:
                     loger.warning(self._pano_msg() + 'Max trials of the URL request reached.\n' \
                                   + response.url + '\nStatus code: ' + response.status_code)
                     loger.exception()
