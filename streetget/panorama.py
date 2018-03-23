@@ -52,10 +52,12 @@ class Panorama:
             return;
 
         self.pano_id = pano_id if pano_id else self.getPanoID(latlng, radius)
-        if not self.pano_id:
+        if not self.pano_id:    #pano_id not found
             return
+
         self.meta = self.getMeta()
         self.time_meta = self.getTimeMeta()
+
     def _pano_msg(self):
         '''
         Serves for basic message in logger messages.
@@ -101,7 +103,7 @@ class Panorama:
 
     def hasZoom(self, zoom):
         """
-        Checks if zomm level is available.
+        Checks if zoom level is available.
         :param zoom: int [0-5]
         :return: boolean
         """
@@ -120,7 +122,7 @@ class Panorama:
         try:
             pano_ids = self._collectSpatialLinks()
         except NoSpatialNeighbours:
-            loger.warn(self._pano_msg() + 'Spatial neighbours not found.')
+            loger.warning(self._pano_msg() + 'Spatial neighbours not found.')
         except Exception:
             loger.exception()
         return pano_ids
@@ -165,16 +167,22 @@ class Panorama:
 
     def _collectTemporalLinks(self, aux):
         try:
-            # Get available panoID hashes
+            # - Get available panoID hashes that are contained in meta -
             # Sometimes the pano hash item is empty
             pano_ids=[]
             for j in range(0, len(aux[3][0])):
-                if len(aux[3][0][-j-1]) == 0:
+                if len(aux[3][0][j]) == 0:          # ...this looks ugly, should be removed
                     continue        # empty item
                 pano_ids.append(aux[3][0][-j-1][0][1])  # pano_id hash string
 
-            # Get timestamps of available time machine panoramas
+            # - Get timestamps of available time machine panoramas -
             # Timestamsps are not always available
+            # Timestamps used to be assighent tho the last n pano_ids, hence the indexes in idx=aux[8][0]
+            # corresponded to the actual panorama in aux[3][0][idx]. The idx started always at the end of the array
+            # aux[3][0]
+            # In 2018, Google changed the policy. Indexes are not valid, timestamps corresponds to the panoramahashes
+            # as folows:
+            # pano_id [3][0][idx] <==> timestamp aux[8][0][-idx-1]
             tstamps = []
             if len(aux) > 9 and aux[8] is not None:
                 for x in aux[8]:
@@ -188,9 +196,10 @@ class Panorama:
                 raise NoTemporalNeighbours('Processing temporal metadata.')
 
             if len_tst > 0:
-                pano_ids = pano_ids[(len_ids-len_tst):]
+                pano_ids = pano_ids[:(len_ids-len_tst)]
             else:
                 tstamps = len_ids*[(None, None)]
+            tstamps = tstamps[::-1]                 # last tstamp coorresponds to the first pano_id hash
 
             return tstamps, pano_ids
         except NoTemporalNeighbours:
@@ -762,6 +771,9 @@ if __name__ == '__main__':
     pid = 'dEVgj2uhGgcAAAQYPMlnig'
     pid = 'T_flse8CPJRvIIFXhmt4xA'
 
+    #faliure case from Jan Tomesek
+    pid = 'vlnAwMU9HmslxyM-dvdlVw'
+    pid = 'Xyska6QRCAb29RQuAPT48Q'
     p = Panorama(pid);
     # p.getImage()
     # p.getDepthData()
