@@ -772,8 +772,9 @@ if __name__ == '__main__':
     pid = 'T_flse8CPJRvIIFXhmt4xA'
 
     #faliure case from Jan Tomesek
-    pid = 'vlnAwMU9HmslxyM-dvdlVw'
-    pid = 'Xyska6QRCAb29RQuAPT48Q'
+    pid = 'vlnAwMU9HmslxyM-dvdlVw'  # should be 2017,7
+    pid = 'Xyska6QRCAb29RQuAPT48Q'  # should be 2017,7
+    pid = 'ePIc09N8cMPoqR_8l3P2cw'  # should be a temporal neighbour 2014,5
     p = Panorama(pid);
     # p.getImage()
     # p.getDepthData()

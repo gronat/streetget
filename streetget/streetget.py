@@ -1,11 +1,14 @@
 #! /usr/bin/python
 """
 Usage:
-    streetget circle ( (LAT LNG) | PID) R [-tid -D DIR -z ZOOM] LABEL
-    streetget box ( (LAT LNG) | PID) W H [-tid -D DIR -z ZOOM] LABEL
-    streetget gpsbox LAT LNG LAT_TL LNG_TL LAT_BR LNG_BR [-tid -D DIR -z ZOOM] LABEL
-    streetget resume [-D DIR] LABEL
-    streetget info ( (LAT LNG) | PID)
+    streetget circle LAT LNG R [options] LABEL
+    streetget circle PID     R [options] LABEL
+    streetget box LAT LNG W H [options] LABEL
+    streetget box PID     W H [options] LABEL
+    streetget gpsbox LAT LNG LAT_TL LNG_TL LAT_BR LNG_BR [options] LABEL
+    streetget gpsbox PID     LAT_TL LNG_TL LAT_BR LNG_BR [options] LABEL
+    streetget resume DIR LABEL
+    streetget info ((LAT LNG) | PID)
     streetget show PID
 
 Commands:
@@ -32,6 +35,7 @@ Arguments:
     LAT_TL, LNG_TL      Top-left corner latitude, longitude.
     LAT_BR, LNG_BR      Bottom-right corner latitude, longitude.
     PID                 Panorama id hash code.
+    DIR                 Directory containing collected datasets.
     W, H                Width and height in meters.
     R                   Radius in meters.
 
@@ -45,8 +49,7 @@ Options:
     -d          Save depth data and depth map thumbnails at zoom level 0.
     -z ZOOM     Comma separated panorama zoom levels [0-5] to be
                 download [default: 0,5]
-    -D DIR      Root directory. Data will be saved in DIR/LABEL/
-                [default: ./]
+    -D DIR      Root directory. [default: ./]
     -h, --help  Prints this screen.
 
 """
@@ -93,60 +96,68 @@ def tofloat(s):
         return float(s)
     return -float(s[1:])
 
-def parse(a):
+def parse(args):
     # Info command
-    if a.info:
+    if args.info:
         # pano_id has priority over latlng
-        print Panorama(pano_id=a.panoid, latlng=a.latlng)
+        print Panorama(pano_id=args.panoid, latlng=args.latlng)
         return
 
     # Show command
-    if a.show:
-        Panorama(pano_id=a.panoid).getImage(2).show()
+    if args.show:
+        Panorama(pano_id=args.panoid).getImage(2).show()
         return
 
     # Setting up loger
-    fdir = os.path.join(a.root, a.label)
+    fdir = os.path.join(args.root, args.label)
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
     l_fmt = '%(asctime)s %(levelname)s [%(filename)s:%(lineno)s - %(funcName)10s() ]: %(message)s'        # format
     l_dfmt = '%m/%d/%Y %I:%M:%S %p'                         # date format
-    l_fname = os.path.join(a.root, a.label, 'crawler.log')  # filepath
+    l_fname = os.path.join(args.root, args.label, 'crawler.log')  # filepath
     logging.basicConfig(filename=l_fname, format=l_fmt, datefmt=l_dfmt)
 
     # Filename for command restore
-    fname = os.path.join(a.root, a.label, 'crawlerArgs.pickle')
+    fname = os.path.join(args.root, args.label, 'crawlerArgs.pickle')
 
     # Handling resuem command a existing crawler
-    if a.resume:
+    if args.resume:
         with open(fname) as f:
-            a = pickle.load(f)
+            args = pickle.load(f)
         print '\nResuming command:'
-        print a.cmds + '\n'
+        print args.cmds + '\n'
     else:
         if os.path.exists(fname):
-            msg = '\n"%s" already crawled. Use "resume" (see --help) to continue crawling.' % (a.label,)
+            msg = '\n"%s" already crawled. Use "resume" (see --help) to continue crawling.' % (args.label,)
             raise AssertionError(msg)
 
     # Create area validator for crawler
-    if a.circle:
-        pvalid = validator.circle(a.latlng, a.r)
-    elif a.box:
-        pvalid = validator.box(a.latlng, a.w, a.h)
-    elif a.gpsbox:
-        pvalid = validator.gpsbox(a.topleft, a.btmright)
+    if args.circle:
+        if args.latlng:
+            pvalid = validator.circle(latlng_origin=args.latlng, radius=args.r)
+        else:
+            pvalid = validator.circle(pid_origin=args.panoid, radius=args.r)
+    elif args.box:
+        if args.latlng:
+            pvalid = validator.circle(latlng_origin=args.latlng, width=args.w, height=args.h)
+        else:
+            pvalid = validator.circle(pid_origin=args.pid, width=args.w, height=args.h)
+
+        # pvalid = validator.box(a.latlng, a.w, a.h)
+    elif args.gpsbox:
+        pvalid = validator.gpsbox(args.topleft, args.btmright)
     else:
         raise NotImplementedError('Unknown validator')
 
     with open(fname, 'w') as f:
-        pickle.dump(a, f)
-    launch(a, pvalid)
+        pickle.dump(args, f)
+    launch(args, pvalid)
 
-def launch(a, pvalid):
-    c = Crawler(pano_id=a.panoid, latlng=a.latlng, validator=pvalid,
-                label=a.label, root=a.root, zoom=a.zoom,
-                images=a.images, depth=a.depth, time=a.time
+def launch(args, pvalid):
+    c = Crawler(pano_id=args.panoid, latlng=args.latlng, validator=pvalid,
+                label=args.label, root=args.root, zoom=args.zoom,
+                images=args.images, depth=args.depth, time=args.time
                 )
     c.run()
 
