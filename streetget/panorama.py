@@ -502,8 +502,8 @@ class Panorama:
             return
 
         img = self.getDepthImg(zoom)
-        with open(fname, 'w') as f:
-            img.save(f, 'JPEG')
+        with open(fname.replace('.jpg','.png',1), 'w') as f:
+            img.save(f, 'PNG')
 
 
     def numTiles(self, zoom):
